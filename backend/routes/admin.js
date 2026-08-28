@@ -118,22 +118,19 @@ router.post(
         answerKey = answerKey.slice(0, expectedQuestions);
       }
 
-      // Upload Question PDF to Supabase Storage
+      // Upload Question PDF to Supabase Storage (with local server storage fallback)
       const unique = `${Date.now()}_${Math.round(Math.random() * 1e9)}`;
       const destPath = `pdfs/${unique}_${pdfFile.originalname.replace(/\s+/g, '_')}`;
       let publicPdfUrl;
       try {
         publicPdfUrl = await uploadToSupabase(pdfFile.path, destPath, 'application/pdf');
-      } catch (uploadErr) {
+        // Clean up local temp PDF file if uploaded to cloud
         if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
-        console.error('Supabase upload failed:', uploadErr.message);
-        return res.status(500).json({
-          message: `Storage upload failed: ${uploadErr.message}. Please verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.`
-        });
+      } catch (uploadErr) {
+        console.error('Supabase upload failed, falling back to local server storage:', uploadErr.message);
+        // Fallback: keep local file in /uploads/pdfs/ and serve statically
+        publicPdfUrl = `/uploads/pdfs/${path.basename(pdfFile.path)}`;
       }
-
-      // Clean up local PDF file
-      if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
 
       const exam = new Exam({
         title: title.trim(),

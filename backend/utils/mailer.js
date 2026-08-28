@@ -1,11 +1,22 @@
 const nodemailer = require('nodemailer');
 
+const mailUser = (process.env.MAIL_USER || '').trim();
+const mailPass = (process.env.MAIL_PASS || '').trim();
+
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // Use STARTTLS on port 587 for cloud platforms (Render, Vercel, etc.)
   auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
+    user: mailUser,
+    pass: mailPass,
   },
+  tls: {
+    rejectUnauthorized: false,
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
 });
 
 /**

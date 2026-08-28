@@ -48,7 +48,14 @@ router.post('/signup', async (req, res) => {
     user.otpExpiry = otpExpiry;
     await user.save();
 
-    await sendOTPEmail(email, name, otp);
+    try {
+      await sendOTPEmail(email, name, otp);
+    } catch (mailErr) {
+      console.error('Failed to send OTP email:', mailErr.message);
+      return res.status(500).json({
+        message: `Failed to send email: ${mailErr.message}. Please verify MAIL_USER and MAIL_PASS.`
+      });
+    }
 
     res.status(200).json({ message: 'OTP sent to your email', email });
   } catch (error) {
@@ -170,7 +177,11 @@ router.post('/resend-otp', async (req, res) => {
     user.otpExpiry = otpExpiry;
     await user.save({ validateBeforeSave: false });
 
-    await sendOTPEmail(email, user.name, otp);
+    try {
+      await sendOTPEmail(email, user.name, otp);
+    } catch (mailErr) {
+      return res.status(500).json({ message: `Failed to send email: ${mailErr.message}. Please verify MAIL_USER and MAIL_PASS.` });
+    }
     res.status(200).json({ message: 'New OTP sent' });
   } catch (error) {
     console.error('Resend OTP error:', error);
@@ -196,7 +207,11 @@ router.post('/forgot-password', async (req, res) => {
     user.otpExpiry = otpExpiry;
     await user.save({ validateBeforeSave: false });
 
-    await sendOTPEmail(email, user.name, otp);
+    try {
+      await sendOTPEmail(email, user.name, otp);
+    } catch (mailErr) {
+      return res.status(500).json({ message: `Failed to send email: ${mailErr.message}. Please verify MAIL_USER and MAIL_PASS.` });
+    }
     res.status(200).json({ message: 'OTP sent to your email', email });
   } catch (error) {
     console.error('Forgot password error:', error);
