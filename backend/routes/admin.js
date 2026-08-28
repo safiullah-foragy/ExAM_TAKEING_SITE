@@ -121,7 +121,16 @@ router.post(
       // Upload Question PDF to Supabase Storage
       const unique = `${Date.now()}_${Math.round(Math.random() * 1e9)}`;
       const destPath = `pdfs/${unique}_${pdfFile.originalname.replace(/\s+/g, '_')}`;
-      const publicPdfUrl = await uploadToSupabase(pdfFile.path, destPath, 'application/pdf');
+      let publicPdfUrl;
+      try {
+        publicPdfUrl = await uploadToSupabase(pdfFile.path, destPath, 'application/pdf');
+      } catch (uploadErr) {
+        if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
+        console.error('Supabase upload failed:', uploadErr.message);
+        return res.status(500).json({
+          message: `Storage upload failed: ${uploadErr.message}. Please verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.`
+        });
+      }
 
       // Clean up local PDF file
       if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);

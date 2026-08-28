@@ -1,12 +1,15 @@
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 
+const supabaseUrl = (process.env.SUPABASE_URL || '').trim().replace(/^["']|["']$/g, '');
+const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim().replace(/^["']|["']$/g, '');
+
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  supabaseUrl,
+  supabaseKey
 );
 
-const BUCKET = process.env.SUPABASE_BUCKET || 'exam-files';
+const BUCKET = (process.env.SUPABASE_BUCKET || 'exam-files').trim().replace(/^["']|["']$/g, '');
 
 /**
  * Upload a local file to Supabase Storage
