@@ -263,11 +263,18 @@ export default function AdminDashboard() {
         formData.append('attachment', mailAttachment);
       }
 
-      const res = await adminApi.post('/admin/mail/send', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // Do not manually override Content-Type header so Axios & browser can attach boundary parameter
+      const res = await adminApi.post('/admin/mail/send', formData);
 
-      toast.success(res.data.message || 'Email broadcast sent successfully! 🎉');
+      if (res.data.sentCount === 0 && res.data.failCount > 0) {
+        const errorDetail = res.data.errors?.[0]?.error || 'Failed to send emails';
+        toast.error(`Sending failed: ${errorDetail}`);
+      } else if (res.data.failCount > 0) {
+        toast.warning(`Sent to ${res.data.sentCount} users, but failed for ${res.data.failCount} users.`);
+      } else {
+        toast.success(res.data.message || 'Email broadcast sent successfully! 🎉');
+      }
+
       setMailDeliveryReport({
         total: res.data.total,
         sentCount: res.data.sentCount,
@@ -281,7 +288,8 @@ export default function AdminDashboard() {
       handleRemoveAttachment();
     } catch (err) {
       console.error('Mail broadcast error:', err);
-      toast.error(err.response?.data?.message || 'Failed to send broadcast email');
+      const errMsg = err.response?.data?.message || err.message || 'Failed to send broadcast email';
+      toast.error(errMsg);
     } finally {
       setSendingMail(false);
     }

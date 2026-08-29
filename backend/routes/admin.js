@@ -373,19 +373,7 @@ router.get('/exam/:id/master-result-pdf', adminOnly, async (req, res) => {
   }
 });
 
-// ─── Multer Mail Attachment Storage ──────────────────────────────────────────
-const mailStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '../uploads/mail');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const unique = `${Date.now()}_${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}_${file.originalname.replace(/\s+/g, '_')}`);
-  },
-});
-
+// ─── Multer Mail Attachment Storage (In-Memory for Cloud & Serverless) ─────
 const mailFileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     'application/pdf',
@@ -401,7 +389,7 @@ const mailFileFilter = (req, file, cb) => {
 };
 
 const mailUpload = multer({
-  storage: mailStorage,
+  storage: multer.memoryStorage(),
   fileFilter: mailFileFilter,
   limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
 });
@@ -439,13 +427,17 @@ router.post(
     try {
       const { subject, message, audience, customEmail } = req.body;
 
+      if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
+        return res.status(500).json({
+          message: 'Server email credentials are not configured. Please ensure MAIL_USER and MAIL_PASS are set in your hosting environment variables.',
+        });
+      }
+
       if (!subject || !subject.trim()) {
-        if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
         return res.status(400).json({ message: 'Subject is required' });
       }
 
       if (!message || !message.trim()) {
-        if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
         return res.status(400).json({ message: 'Message content is required' });
       }
 
@@ -453,7 +445,6 @@ router.post(
 
       if (audience === 'custom') {
         if (!customEmail || !customEmail.includes('@')) {
-          if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
           return res.status(400).json({ message: 'Please provide a valid email address for custom recipient' });
         }
         recipients = [{ email: customEmail.trim(), name: 'Admin / Tester' }];
@@ -465,14 +456,13 @@ router.post(
       }
 
       if (!recipients || recipients.length === 0) {
-        if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
         return res.status(400).json({ message: 'No recipients found for the selected audience' });
       }
 
       const attachmentData = file
         ? {
             filename: file.originalname,
-            path: file.path,
+            buffer: file.buffer,
             contentType: file.mimetype,
           }
         : null;
@@ -481,31 +471,43 @@ router.post(
       let failCount = 0;
       const errors = [];
 
-      // Send to recipients sequentially with individual try/catch
-      for (const recipient of recipients) {
-        try {
-          await sendBroadcastEmail({
-            to: recipient.email,
-            name: recipient.name,
-            subject: subject.trim(),
-            message: message.trim(),
-            attachment: attachmentData,
-          });
-          sentCount++;
-        } catch (sendErr) {
-          failCount++;
-          console.error(`Failed to send broadcast mail to ${recipient.email}:`, sendErr.message);
-          errors.push({ email: recipient.email, error: sendErr.message });
-        }
+      // Send to recipients concurrently in batches of 5 to respect serverless timeouts & rate limits
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+        const batch = recipients.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(
+          batch.map((recipient) =>
+            sendBroadcastEmail({
+              to: recipient.email,
+              name: recipient.name,
+              subject: subject.trim(),
+              message: message.trim(),
+              attachment: attachmentData,
+            })
+          )
+        );
+
+        results.forEach((result, idx) => {
+          if (result.status === 'fulfilled') {
+            sentCount++;
+          } else {
+            failCount++;
+            const errMsg = result.reason?.message || 'Email sending failed';
+            console.error(`Failed to send broadcast mail to ${batch[idx].email}:`, errMsg);
+            errors.push({ email: batch[idx].email, error: errMsg });
+          }
+        });
       }
 
-      // Cleanup temp uploaded file
-      if (file && fs.existsSync(file.path)) {
-        try {
-          fs.unlinkSync(file.path);
-        } catch (unlinkErr) {
-          console.error('Failed to unlink temp attachment:', unlinkErr);
-        }
+      if (sentCount === 0 && failCount > 0) {
+        const firstErrMsg = errors[0]?.error || 'Failed to dispatch email';
+        return res.status(500).json({
+          message: `Delivery failed: ${firstErrMsg}`,
+          total: recipients.length,
+          sentCount: 0,
+          failCount,
+          errors: errors.slice(0, 5),
+        });
       }
 
       res.json({
@@ -516,11 +518,8 @@ router.post(
         errors: errors.slice(0, 5),
       });
     } catch (error) {
-      if (file && fs.existsSync(file.path)) {
-        try { fs.unlinkSync(file.path); } catch (e) {}
-      }
       console.error('Admin broadcast mail error:', error);
-      res.status(500).json({ message: 'Failed to send broadcast mail', error: error.message });
+      res.status(500).json({ message: error.message || 'Failed to send broadcast mail', error: error.message });
     }
   }
 );

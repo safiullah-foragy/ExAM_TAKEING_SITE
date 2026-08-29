@@ -1,23 +1,26 @@
 const nodemailer = require('nodemailer');
 
-const mailUser = (process.env.MAIL_USER || '').trim();
-const mailPass = (process.env.MAIL_PASS || '').trim();
+const getTransporter = () => {
+  const mailUser = (process.env.MAIL_USER || '').trim();
+  const mailPass = (process.env.MAIL_PASS || '').trim().replace(/\s+/g, '');
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // Use STARTTLS on port 587 for cloud platforms (Render, Vercel, etc.)
-  auth: {
-    user: mailUser,
-    pass: mailPass,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
-});
+  return nodemailer.createTransport({
+    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: mailUser,
+      pass: mailPass,
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
+  });
+};
 
 /**
  * Send OTP email to a user
@@ -58,7 +61,7 @@ const sendOTPEmail = async (to, name, otp) => {
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await getTransporter().sendMail(mailOptions);
 };
 
 /**
@@ -109,7 +112,7 @@ const sendResultEmail = async (to, name, examTitle, score, totalMarks, passed, p
       : [],
   };
 
-  await transporter.sendMail(mailOptions);
+  await getTransporter().sendMail(mailOptions);
 };
 
 /**
@@ -174,7 +177,7 @@ const sendNewExamNotificationEmail = async (to, name, exam) => {
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await getTransporter().sendMail(mailOptions);
 };
 
 /**
@@ -193,12 +196,20 @@ const sendBroadcastEmail = async ({ to, name, subject, message, attachment = nul
   const attachments = [];
   let attachmentNoticeHtml = '';
 
-  if (attachment && attachment.path && fs.existsSync(attachment.path)) {
-    attachments.push({
-      filename: attachment.filename,
-      path: attachment.path,
-      contentType: attachment.contentType,
-    });
+  if (attachment) {
+    if (attachment.buffer) {
+      attachments.push({
+        filename: attachment.filename,
+        content: attachment.buffer,
+        contentType: attachment.contentType,
+      });
+    } else if (attachment.path && fs.existsSync(attachment.path)) {
+      attachments.push({
+        filename: attachment.filename,
+        path: attachment.path,
+        contentType: attachment.contentType,
+      });
+    }
 
     const isImage = attachment.contentType && attachment.contentType.startsWith('image/');
     attachmentNoticeHtml = `
@@ -250,7 +261,7 @@ const sendBroadcastEmail = async ({ to, name, subject, message, attachment = nul
     attachments,
   };
 
-  return await transporter.sendMail(mailOptions);
+  return await getTransporter().sendMail(mailOptions);
 };
 
 module.exports = {
@@ -259,4 +270,5 @@ module.exports = {
   sendNewExamNotificationEmail,
   sendBroadcastEmail,
 };
+
 
