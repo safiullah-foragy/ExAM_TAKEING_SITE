@@ -177,4 +177,86 @@ const sendNewExamNotificationEmail = async (to, name, exam) => {
   await transporter.sendMail(mailOptions);
 };
 
-module.exports = { sendOTPEmail, sendResultEmail, sendNewExamNotificationEmail };
+/**
+ * Send custom announcement/broadcast email with optional PDF/image attachment
+ */
+const sendBroadcastEmail = async ({ to, name, subject, message, attachment = null }) => {
+  const loginUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const fs = require('fs');
+
+  // Convert raw message text with linebreaks to safe HTML paragraphs
+  const safeMessageHtml = (message || '')
+    .split(/\r?\n\r?\n/)
+    .map((paragraph) => `<p style="color:#cbd5e1;font-size:15px;line-height:1.7;margin:0 0 16px;">${paragraph.replace(/\r?\n/g, '<br>')}</p>`)
+    .join('');
+
+  const attachments = [];
+  let attachmentNoticeHtml = '';
+
+  if (attachment && attachment.path && fs.existsSync(attachment.path)) {
+    attachments.push({
+      filename: attachment.filename,
+      path: attachment.path,
+      contentType: attachment.contentType,
+    });
+
+    const isImage = attachment.contentType && attachment.contentType.startsWith('image/');
+    attachmentNoticeHtml = `
+      <div style="background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);border-radius:10px;padding:16px 20px;margin:24px 0;display:flex;align-items:center;">
+        <span style="font-size:24px;margin-right:12px;">${isImage ? '🖼️' : '📄'}</span>
+        <div>
+          <div style="color:#ffffff;font-weight:600;font-size:14px;">Attached File: ${attachment.filename}</div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:2px;">Please find the attached ${isImage ? 'image' : 'PDF document'} in this email.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  const mailOptions = {
+    from: `"ExamSite Notice" <${process.env.MAIL_USER}>`,
+    to,
+    subject,
+    html: `
+      <!DOCTYPE html>
+      <html>
+        <body style="margin:0;padding:0;background:#0f0f1a;font-family:'Segoe UI',sans-serif;">
+          <div style="max-width:560px;margin:40px auto;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;overflow:hidden;border:1px solid rgba(99,102,241,0.3);box-shadow:0 12px 40px rgba(0,0,0,0.5);">
+            <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px;text-align:center;">
+              <h1 style="color:#fff;margin:0;font-size:26px;letter-spacing:-0.5px;">📢 ExamSite Announcement</h1>
+              <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px;">Notice from Administration</p>
+            </div>
+            <div style="padding:36px 32px;">
+              <h2 style="color:#e2e8f0;margin:0 0 16px;font-size:20px;">Hello, ${name || 'Student'}! 👋</h2>
+              
+              <div style="margin-bottom:24px;">
+                ${safeMessageHtml}
+              </div>
+
+              ${attachmentNoticeHtml}
+
+              <div style="text-align:center;margin:32px 0 16px;">
+                <a href="${loginUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px;box-shadow:0 4px 16px rgba(99,102,241,0.4);">
+                  Open ExamSite Portal →
+                </a>
+              </div>
+            </div>
+            <div style="background:rgba(0,0,0,0.3);padding:20px 32px;text-align:center;">
+              <p style="color:#475569;font-size:12px;margin:0;">© 2026 ExamSite. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `,
+    attachments,
+  };
+
+  return await transporter.sendMail(mailOptions);
+};
+
+module.exports = {
+  sendOTPEmail,
+  sendResultEmail,
+  sendNewExamNotificationEmail,
+  sendBroadcastEmail,
+};
+

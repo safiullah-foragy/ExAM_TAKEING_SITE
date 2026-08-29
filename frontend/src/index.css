@@ -746,6 +746,101 @@ a:hover { color: var(--secondary-light); }
 .admin-tab.active { color: var(--primary-light); border-bottom-color: var(--primary); }
 .admin-tab:hover:not(.active) { color: var(--text-secondary); }
 
+/* ── Admin Mail Broadcast Section ───────────────────────────── */
+.mail-stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.mail-stat-badge {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid var(--border);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.mail-stat-badge strong {
+  color: var(--primary-light);
+}
+.mail-audience-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+.mail-audience-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.mail-audience-card:hover {
+  border-color: var(--border-hover);
+  background: rgba(99, 102, 241, 0.06);
+}
+.mail-audience-card.selected {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.14);
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.2);
+}
+.mail-audience-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.mail-audience-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.mail-attachment-preview {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-top: 0.75rem;
+}
+.mail-attachment-thumb {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.mail-attachment-icon {
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: var(--radius-sm);
+}
+.mail-delivery-box {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.05));
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+
 /* ── Toast Notification ─────────────────────────────────────── */
 .toast-container {
   position: fixed;

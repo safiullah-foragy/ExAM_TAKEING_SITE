@@ -46,6 +46,19 @@ export default function AdminDashboard() {
     totalQuestions: '',
   });
 
+  // Mail Broadcast States
+  const [mailSubject, setMailSubject] = useState('');
+  const [mailMessage, setMailMessage] = useState('');
+  const [mailAudience, setMailAudience] = useState('verified'); // 'verified' | 'all' | 'custom'
+  const [mailCustomEmail, setMailCustomEmail] = useState('');
+  const [mailAttachment, setMailAttachment] = useState(null);
+  const [mailAttachmentPreview, setMailAttachmentPreview] = useState(null);
+  const [mailStats, setMailStats] = useState({ totalUsers: 0, verifiedUsers: 0, loading: false });
+  const [sendingMail, setSendingMail] = useState(false);
+  const [mailDeliveryReport, setMailDeliveryReport] = useState(null);
+  const [showMailConfirmModal, setShowMailConfirmModal] = useState(false);
+
+
   const handleOpenEdit = (exam) => {
     setEditingExam(exam);
     setEditForm({
@@ -149,9 +162,131 @@ export default function AdminDashboard() {
     finally { setLoadingExams(false); }
   };
 
+  const fetchMailStats = async () => {
+    setMailStats((prev) => ({ ...prev, loading: true }));
+    try {
+      const res = await adminApi.get('/admin/mail/stats');
+      setMailStats({
+        totalUsers: res.data.totalUsers || 0,
+        verifiedUsers: res.data.verifiedUsers || 0,
+        loading: false,
+      });
+    } catch (err) {
+      console.error('Failed to fetch mail stats:', err);
+      setMailStats((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
   useEffect(() => {
     if (tab === 'exams') fetchExams();
+    if (tab === 'mail') fetchMailStats();
   }, [tab]);
+
+  const handleMailAttachmentChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const validTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+    ];
+
+    if (!validTypes.includes(file.type)) {
+      toast.error('Only PDF documents or image files (JPG, PNG, WebP, GIF) are allowed');
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error('Attachment file size must be less than 25MB');
+      return;
+    }
+
+    setMailAttachment(file);
+    if (file.type.startsWith('image/')) {
+      setMailAttachmentPreview(URL.createObjectURL(file));
+    } else {
+      setMailAttachmentPreview(null);
+    }
+  };
+
+  const handleRemoveAttachment = () => {
+    if (mailAttachmentPreview) {
+      URL.revokeObjectURL(mailAttachmentPreview);
+    }
+    setMailAttachment(null);
+    setMailAttachmentPreview(null);
+  };
+
+  const targetRecipientCount =
+    mailAudience === 'custom'
+      ? 1
+      : mailAudience === 'all'
+      ? mailStats.totalUsers
+      : mailStats.verifiedUsers;
+
+  const handleInitiateSendMail = (e) => {
+    e.preventDefault();
+    if (!mailSubject.trim()) {
+      return toast.error('Please enter an email subject');
+    }
+    if (!mailMessage.trim()) {
+      return toast.error('Please enter the message body');
+    }
+    if (mailAudience === 'custom') {
+      if (!mailCustomEmail.trim() || !mailCustomEmail.includes('@')) {
+        return toast.error('Please enter a valid recipient email address');
+      }
+    } else if (targetRecipientCount === 0) {
+      return toast.error('There are no recipients found in the selected audience');
+    }
+
+    setShowMailConfirmModal(true);
+  };
+
+  const handleConfirmSendMail = async () => {
+    setShowMailConfirmModal(false);
+    setSendingMail(true);
+    setMailDeliveryReport(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('subject', mailSubject.trim());
+      formData.append('message', mailMessage.trim());
+      formData.append('audience', mailAudience);
+      if (mailAudience === 'custom') {
+        formData.append('customEmail', mailCustomEmail.trim());
+      }
+      if (mailAttachment) {
+        formData.append('attachment', mailAttachment);
+      }
+
+      const res = await adminApi.post('/admin/mail/send', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      toast.success(res.data.message || 'Email broadcast sent successfully! 🎉');
+      setMailDeliveryReport({
+        total: res.data.total,
+        sentCount: res.data.sentCount,
+        failCount: res.data.failCount,
+        timestamp: new Date().toLocaleTimeString(),
+        errors: res.data.errors || [],
+      });
+
+      setMailSubject('');
+      setMailMessage('');
+      handleRemoveAttachment();
+    } catch (err) {
+      console.error('Mail broadcast error:', err);
+      toast.error(err.response?.data?.message || 'Failed to send broadcast email');
+    } finally {
+      setSendingMail(false);
+    }
+  };
+
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -229,6 +364,11 @@ export default function AdminDashboard() {
               className={`admin-tab${tab === 'exams' ? ' active' : ''}`}
               onClick={() => setTab('exams')}
             >📋 Manage Exams</div>
+            <div
+              id="tab-mail"
+              className={`admin-tab${tab === 'mail' ? ' active' : ''}`}
+              onClick={() => setTab('mail')}
+            >✉️ Broadcast Mail</div>
           </div>
 
           {/* ── Create Exam Tab ── */}
@@ -421,6 +561,261 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Broadcast Mail Tab ── */}
+          {tab === 'mail' && (
+            <div className="glass" style={{ padding: '2rem', maxWidth: 760, margin: '0 auto' }}>
+              <div style={{ marginBottom: '1.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div>
+                    <h2 style={{ margin: '0 0 0.4rem 0', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      ✉️ Broadcast Email Announcement
+                    </h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', margin: 0 }}>
+                      Send notices, guidelines, PDFs, or images directly to candidate inboxes.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={fetchMailStats}
+                    disabled={mailStats.loading}
+                    title="Refresh recipient numbers"
+                  >
+                    🔄 Refresh Recipient Counts
+                  </button>
+                </div>
+              </div>
+
+              {/* Recipient Stats Bar */}
+              <div className="mail-stats-bar">
+                <div className="mail-stat-badge">
+                  <span>👥 Verified Students:</span>
+                  <strong>{mailStats.loading ? '...' : mailStats.verifiedUsers}</strong>
+                </div>
+                <div className="mail-stat-badge">
+                  <span>🌐 Total Registered Users:</span>
+                  <strong>{mailStats.loading ? '...' : mailStats.totalUsers}</strong>
+                </div>
+              </div>
+
+              {/* Form */}
+              <form id="mail-broadcast-form" onSubmit={handleInitiateSendMail}>
+                {/* Target Audience Selector */}
+                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                  <label className="form-label" style={{ marginBottom: '0.6rem' }}>
+                    🎯 Select Target Audience *
+                  </label>
+                  <div className="mail-audience-grid">
+                    <div
+                      className={`mail-audience-card${mailAudience === 'verified' ? ' selected' : ''}`}
+                      onClick={() => setMailAudience('verified')}
+                    >
+                      <div className="mail-audience-title">
+                        <span>✅ Verified Students</span>
+                        {mailAudience === 'verified' && <span style={{ color: 'var(--primary-light)', marginLeft: 'auto' }}>●</span>}
+                      </div>
+                      <div className="mail-audience-desc">
+                        Sends to {mailStats.verifiedUsers} users with verified emails (Recommended).
+                      </div>
+                    </div>
+
+                    <div
+                      className={`mail-audience-card${mailAudience === 'all' ? ' selected' : ''}`}
+                      onClick={() => setMailAudience('all')}
+                    >
+                      <div className="mail-audience-title">
+                        <span>🌐 All Registered</span>
+                        {mailAudience === 'all' && <span style={{ color: 'var(--primary-light)', marginLeft: 'auto' }}>●</span>}
+                      </div>
+                      <div className="mail-audience-desc">
+                        Sends to all {mailStats.totalUsers} registered users in the database.
+                      </div>
+                    </div>
+
+                    <div
+                      className={`mail-audience-card${mailAudience === 'custom' ? ' selected' : ''}`}
+                      onClick={() => setMailAudience('custom')}
+                    >
+                      <div className="mail-audience-title">
+                        <span>🧪 Test / Specific</span>
+                        {mailAudience === 'custom' && <span style={{ color: 'var(--primary-light)', marginLeft: 'auto' }}>●</span>}
+                      </div>
+                      <div className="mail-audience-desc">
+                        Send a preview test mail to a single email address.
+                      </div>
+                    </div>
+                  </div>
+
+                  {mailAudience === 'custom' && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <label className="form-label" style={{ fontSize: '0.82rem' }}>Custom Recipient Email *</label>
+                      <input
+                        id="mail-custom-email"
+                        type="email"
+                        className="form-input"
+                        placeholder="e.g. admin@example.com or your test email"
+                        value={mailCustomEmail}
+                        onChange={(e) => setMailCustomEmail(e.target.value)}
+                        required={mailAudience === 'custom'}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Subject */}
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label">
+                    🏷️ Email Subject *
+                  </label>
+                  <input
+                    id="mail-subject"
+                    name="mailSubject"
+                    className="form-input"
+                    placeholder="e.g. 📢 Important Notice: Upcoming Exam Schedule & Instructions"
+                    value={mailSubject}
+                    onChange={(e) => setMailSubject(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* Message Body (Text Box) */}
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.4rem' }}>
+                    <label className="form-label" style={{ margin: 0 }}>
+                      📝 Message Body (Text Box) *
+                    </label>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {mailMessage.length} characters
+                    </span>
+                  </div>
+                  <textarea
+                    id="mail-message"
+                    name="mailMessage"
+                    className="form-input form-textarea"
+                    rows={8}
+                    placeholder="Type your message or announcement text here...&#10;&#10;Line breaks and paragraphs will be formatted cleanly in the email."
+                    value={mailMessage}
+                    onChange={(e) => setMailMessage(e.target.value)}
+                    required
+                    style={{ lineHeight: 1.6 }}
+                  />
+                </div>
+
+                {/* File Attachment: PDF or Image */}
+                <div className="form-group" style={{ marginBottom: '1.75rem' }}>
+                  <label className="form-label">
+                    📎 Attach PDF or Image (Optional)
+                  </label>
+
+                  {!mailAttachment ? (
+                    <div className="file-input-wrapper">
+                      <span className="file-input-icon">📎</span>
+                      <p style={{ color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>
+                        Click or drag to attach a <strong style={{ color: 'var(--primary-light)' }}>PDF</strong> or <strong style={{ color: 'var(--primary-light)' }}>Image</strong>
+                      </p>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Supported formats: PDF, JPG, PNG, WebP, GIF • Max 25MB
+                      </p>
+                      <input
+                        id="mail-file-upload"
+                        type="file"
+                        accept=".pdf,image/jpeg,image/png,image/webp,image/gif"
+                        onChange={handleMailAttachmentChange}
+                      />
+                    </div>
+                  ) : (
+                    <div className="mail-attachment-preview">
+                      {mailAttachmentPreview ? (
+                        <img
+                          src={mailAttachmentPreview}
+                          alt="Attachment preview"
+                          className="mail-attachment-thumb"
+                        />
+                      ) : (
+                        <div className="mail-attachment-icon">📄</div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontWeight: 600,
+                          fontSize: '0.9rem',
+                          color: 'var(--text-primary)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}>
+                          {mailAttachment.name}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {(mailAttachment.size / (1024 * 1024)).toFixed(2)} MB • {mailAttachment.type || 'File'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={handleRemoveAttachment}
+                        style={{ color: 'var(--accent-red)', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                      >
+                        ✕ Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Submit Actions */}
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    id="mail-send-btn"
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={sendingMail || !mailSubject.trim() || !mailMessage.trim() || (mailAudience !== 'custom' && targetRecipientCount === 0)}
+                    style={{ flex: 1, padding: '0.85rem 1.5rem', fontSize: '0.95rem' }}
+                  >
+                    {sendingMail ? (
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                        <span className="spinner" style={{ width: 18, height: 18 }}></span>
+                        Sending to {targetRecipientCount} {targetRecipientCount === 1 ? 'User' : 'Users'}...
+                      </span>
+                    ) : (
+                      `🚀 Send to ${mailAudience === 'custom' ? 'Test Recipient' : `All (${targetRecipientCount} Users)`}`
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => {
+                      setMailSubject('');
+                      setMailMessage('');
+                      handleRemoveAttachment();
+                    }}
+                    disabled={sendingMail || (!mailSubject && !mailMessage && !mailAttachment)}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </form>
+
+              {/* Delivery Report Card */}
+              {mailDeliveryReport && (
+                <div className="mail-delivery-box">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '1.25rem' }}>✅</span>
+                    <strong style={{ color: 'var(--accent-green)', fontSize: '0.98rem' }}>
+                      Broadcast Complete at {mailDeliveryReport.timestamp}
+                    </strong>
+                  </div>
+                  <div style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    <span>Total Targeted: <strong>{mailDeliveryReport.total}</strong></span>
+                    <span>Delivered Successfully: <strong style={{ color: 'var(--accent-green)' }}>{mailDeliveryReport.sentCount}</strong></span>
+                    {mailDeliveryReport.failCount > 0 && (
+                      <span>Failed: <strong style={{ color: 'var(--accent-red)' }}>{mailDeliveryReport.failCount}</strong></span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -770,6 +1165,80 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* ── Mail Send Confirmation Modal ── */}
+      {showMailConfirmModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, backdropFilter: 'blur(6px)', padding: '1rem'
+        }}>
+          <div className="glass-elevated" style={{
+            padding: '2rem', maxWidth: 520, width: '100%', borderRadius: 'var(--radius-lg)'
+          }}>
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '2.8rem', marginBottom: '0.5rem' }}>📨</div>
+              <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.25rem' }}>
+                Confirm Broadcast Email
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.4rem' }}>
+                Please review your announcement details before dispatching.
+              </p>
+            </div>
+
+            <div style={{
+              background: 'rgba(99, 102, 241, 0.08)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '1.25rem',
+              marginBottom: '1.5rem',
+              fontSize: '0.88rem'
+            }}>
+              <div style={{ marginBottom: '0.6rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Target Audience: </span>
+                <strong style={{ color: 'var(--primary-light)' }}>
+                  {mailAudience === 'custom'
+                    ? `Custom: ${mailCustomEmail}`
+                    : mailAudience === 'all'
+                    ? `All Registered (${mailStats.totalUsers} users)`
+                    : `Verified Students (${mailStats.verifiedUsers} users)`}
+                </strong>
+              </div>
+
+              <div style={{ marginBottom: '0.6rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Subject: </span>
+                <strong style={{ color: 'var(--text-primary)' }}>{mailSubject}</strong>
+              </div>
+
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Attachment: </span>
+                <strong style={{ color: mailAttachment ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                  {mailAttachment ? `📎 ${mailAttachment.name} (${(mailAttachment.size / (1024 * 1024)).toFixed(2)} MB)` : 'None'}
+                </strong>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setShowMailConfirmModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                id="confirm-send-mail-btn"
+                type="button"
+                className="btn btn-primary"
+                onClick={handleConfirmSendMail}
+              >
+                🚀 Confirm &amp; Send Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
+

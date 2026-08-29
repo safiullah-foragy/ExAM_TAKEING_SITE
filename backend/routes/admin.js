@@ -10,7 +10,7 @@ const Submission = require('../models/Submission');
 const { adminOnly } = require('../middleware/auth');
 const { parseAnswerCSV } = require('../utils/csvParser');
 const { uploadToSupabase, deleteFromSupabase } = require('../utils/supabaseStorage');
-const { sendNewExamNotificationEmail } = require('../utils/mailer');
+const { sendNewExamNotificationEmail, sendBroadcastEmail } = require('../utils/mailer');
 const { generateMasterExamResultPDF } = require('../utils/pdfGenerator');
 
 // ─── Multer Temp Storage ──────────────────────────────────────────────────────
@@ -373,4 +373,157 @@ router.get('/exam/:id/master-result-pdf', adminOnly, async (req, res) => {
   }
 });
 
+// ─── Multer Mail Attachment Storage ──────────────────────────────────────────
+const mailStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '../uploads/mail');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const unique = `${Date.now()}_${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${unique}_${file.originalname.replace(/\s+/g, '_')}`);
+  },
+});
+
+const mailFileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+  ];
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    return cb(null, true);
+  }
+  return cb(new Error('Only PDF documents or image files (JPG, PNG, WebP, GIF) are allowed'), false);
+};
+
+const mailUpload = multer({
+  storage: mailStorage,
+  fileFilter: mailFileFilter,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
+});
+
+// ─── GET /api/admin/mail/stats ────────────────────────────────────────────────
+router.get('/mail/stats', adminOnly, async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const verifiedUsers = await User.countDocuments({ isVerified: true });
+    res.json({ totalUsers, verifiedUsers });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching recipient stats', error: error.message });
+  }
+});
+
+// ─── POST /api/admin/mail/send ───────────────────────────────────────────────
+router.post(
+  '/mail/send',
+  adminOnly,
+  (req, res, next) => {
+    mailUpload.single('attachment')(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ message: 'Attachment file size exceeds 25MB limit' });
+        }
+        return res.status(400).json({ message: err.message });
+      } else if (err) {
+        return res.status(400).json({ message: err.message });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    const file = req.file;
+    try {
+      const { subject, message, audience, customEmail } = req.body;
+
+      if (!subject || !subject.trim()) {
+        if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        return res.status(400).json({ message: 'Subject is required' });
+      }
+
+      if (!message || !message.trim()) {
+        if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        return res.status(400).json({ message: 'Message content is required' });
+      }
+
+      let recipients = [];
+
+      if (audience === 'custom') {
+        if (!customEmail || !customEmail.includes('@')) {
+          if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+          return res.status(400).json({ message: 'Please provide a valid email address for custom recipient' });
+        }
+        recipients = [{ email: customEmail.trim(), name: 'Admin / Tester' }];
+      } else if (audience === 'all') {
+        recipients = await User.find().select('name email');
+      } else {
+        // Default: only verified users
+        recipients = await User.find({ isVerified: true }).select('name email');
+      }
+
+      if (!recipients || recipients.length === 0) {
+        if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        return res.status(400).json({ message: 'No recipients found for the selected audience' });
+      }
+
+      const attachmentData = file
+        ? {
+            filename: file.originalname,
+            path: file.path,
+            contentType: file.mimetype,
+          }
+        : null;
+
+      let sentCount = 0;
+      let failCount = 0;
+      const errors = [];
+
+      // Send to recipients sequentially with individual try/catch
+      for (const recipient of recipients) {
+        try {
+          await sendBroadcastEmail({
+            to: recipient.email,
+            name: recipient.name,
+            subject: subject.trim(),
+            message: message.trim(),
+            attachment: attachmentData,
+          });
+          sentCount++;
+        } catch (sendErr) {
+          failCount++;
+          console.error(`Failed to send broadcast mail to ${recipient.email}:`, sendErr.message);
+          errors.push({ email: recipient.email, error: sendErr.message });
+        }
+      }
+
+      // Cleanup temp uploaded file
+      if (file && fs.existsSync(file.path)) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (unlinkErr) {
+          console.error('Failed to unlink temp attachment:', unlinkErr);
+        }
+      }
+
+      res.json({
+        message: `Broadcast completed: ${sentCount} sent successfully${failCount > 0 ? `, ${failCount} failed` : ''}.`,
+        total: recipients.length,
+        sentCount,
+        failCount,
+        errors: errors.slice(0, 5),
+      });
+    } catch (error) {
+      if (file && fs.existsSync(file.path)) {
+        try { fs.unlinkSync(file.path); } catch (e) {}
+      }
+      console.error('Admin broadcast mail error:', error);
+      res.status(500).json({ message: 'Failed to send broadcast mail', error: error.message });
+    }
+  }
+);
+
 module.exports = router;
+
