@@ -67,7 +67,7 @@ export default function PDFViewer({ pdfUrl }) {
         if (!cancelled) {
           setError(
             err.name === 'MissingPDFException' || err.status === 404
-              ? 'Question PDF file could not be found on the server (404).'
+              ? 'Question PDF file could not be found on the server (404). If this is an older exam, please go to Admin Dashboard → Edit Exam → re-upload the PDF to save it permanently.'
               : 'Failed to load PDF in viewer.'
           );
           setLoading(false);

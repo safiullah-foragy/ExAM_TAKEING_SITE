@@ -49,7 +49,7 @@ router.get('/', protect, async (req, res) => {
 router.get('/:id', protect, async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.id).select('-answerKey');
-    if (!exam || !exam.isActive) {
+    if (!exam || (!exam.isActive && !req.admin)) {
       return res.status(404).json({ message: 'Exam not found or not active' });
     }
 
@@ -92,7 +92,7 @@ router.get('/:id', protect, async (req, res) => {
 router.get('/:id/pdf', protect, async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.id);
-    if (!exam || !exam.isActive) {
+    if (!exam || (!exam.isActive && !req.admin)) {
       return res.status(404).json({ message: 'Exam not found or not active' });
     }
 
