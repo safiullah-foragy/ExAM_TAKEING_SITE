@@ -39,11 +39,10 @@ const uploadToGridFS = async (bufferOrPath, filename, contentType = 'application
     });
 
     uploadStream.on('error', (err) => reject(err));
-    uploadStream.on('finish', (file) => {
+    uploadStream.on('finish', () => {
       resolve({
-        fileId: file._id.toString(),
-        filename: file.filename,
-        length: file.length,
+        fileId: uploadStream.id.toString(),
+        filename: safeFilename,
       });
     });
 
