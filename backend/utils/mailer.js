@@ -204,22 +204,37 @@ const sendNewExamNotificationEmail = async (to, name, exam) => {
               <h3 style="color:#ffffff;margin:0 0 12px;font-size:18px;">📝 ${exam.title}</h3>
               <table style="width:100%;color:#94a3b8;font-size:14px;border-collapse:collapse;">
                 <tr>
-                  <td style="padding:4px 0;">🎯 <strong>Full Marks:</strong></td>
-                  <td style="padding:4px 0;color:#e2e8f0;text-align:right;">${exam.totalMarks} Marks</td>
+                  <td style="padding:5px 0;">🎯 <strong>Full Marks:</strong></td>
+                  <td style="padding:5px 0;color:#e2e8f0;text-align:right;">${exam.totalMarks} Marks</td>
                 </tr>
                 <tr>
-                  <td style="padding:4px 0;">✅ <strong>Pass Marks:</strong></td>
-                  <td style="padding:4px 0;color:#10b981;text-align:right;">${exam.passMarks} Marks</td>
+                  <td style="padding:5px 0;">✅ <strong>Pass Marks:</strong></td>
+                  <td style="padding:5px 0;color:#10b981;text-align:right;">${exam.passMarks} Marks</td>
                 </tr>
                 <tr>
-                  <td style="padding:4px 0;">⏱ <strong>Total Time:</strong></td>
-                  <td style="padding:4px 0;color:#e2e8f0;text-align:right;">${exam.totalTime} Minutes</td>
+                  <td style="padding:5px 0;">⏱ <strong>Total Time:</strong></td>
+                  <td style="padding:5px 0;color:#e2e8f0;text-align:right;">${exam.totalTime} Minutes</td>
                 </tr>
                 <tr>
-                  <td style="padding:4px 0;">❓ <strong>Total Questions:</strong></td>
-                  <td style="padding:4px 0;color:#e2e8f0;text-align:right;">${exam.totalQuestions} MCQs</td>
+                  <td style="padding:5px 0;">❓ <strong>Total Questions:</strong></td>
+                  <td style="padding:5px 0;color:#e2e8f0;text-align:right;">${exam.totalQuestions} MCQs</td>
+                </tr>
+                <tr>
+                  <td style="padding:5px 0;">➕ <strong>Marks per MCQ:</strong></td>
+                  <td style="padding:5px 0;color:#e2e8f0;text-align:right;">+${exam.marksPerMCQ || 1}</td>
+                </tr>
+                <tr>
+                  <td style="padding:5px 0;">⚠️ <strong>Negative Marking:</strong></td>
+                  <td style="padding:5px 0;text-align:right;color:${Number(exam.negativeMark) > 0 ? '#f87171' : '#34d399'};font-weight:600;">
+                    ${Number(exam.negativeMark) > 0 ? `-${exam.negativeMark} per wrong answer` : 'None (0)'}
+                  </td>
                 </tr>
               </table>
+              ${Number(exam.negativeMark) > 0 ? `
+                <div style="background:rgba(239,68,68,0.12);border-left:3px solid #ef4444;border-radius:6px;padding:8px 12px;margin-top:14px;color:#fca5a5;font-size:13px;line-height:1.4;">
+                  ⚠️ <strong>Negative Marking Alert:</strong> Each incorrect answer will deduct <strong>${exam.negativeMark} mark${Number(exam.negativeMark) !== 1 ? 's' : ''}</strong> from your total score.
+                </div>
+              ` : ''}
             </div>
 
             <div style="text-align:center;margin:32px 0 16px;">
