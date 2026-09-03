@@ -2,10 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set up PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).toString();
+if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url
+    ).toString();
+  } catch {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '4.10.38'}/build/pdf.worker.min.mjs`;
+  }
+}
 
 export default function PDFViewer({ pdfUrl }) {
   const [pdf, setPdf] = useState(null);
@@ -13,6 +19,7 @@ export default function PDFViewer({ pdfUrl }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [scale, setScale] = useState(1.2);
+  const [reloadCount, setReloadCount] = useState(0);
   const containerRef = useRef();
 
   useEffect(() => {
@@ -22,9 +29,21 @@ export default function PDFViewer({ pdfUrl }) {
     setPages([]);
     setPdf(null);
 
+    if (!pdfUrl) {
+      setError('No PDF URL specified for this exam.');
+      setLoading(false);
+      return;
+    }
+
     const loadPdf = async () => {
       try {
-        const loadingTask = pdfjsLib.getDocument({ url: pdfUrl, withCredentials: false });
+        const loadingTask = pdfjsLib.getDocument({
+          url: pdfUrl,
+          withCredentials: false,
+          cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '4.10.38'}/cmaps/`,
+          cMapPacked: true,
+        });
+
         const pdfDoc = await loadingTask.promise;
         if (cancelled) return;
         setPdf(pdfDoc);
@@ -40,8 +59,13 @@ export default function PDFViewer({ pdfUrl }) {
           setLoading(false);
         }
       } catch (err) {
+        console.error('PDFViewer loading error:', err);
         if (!cancelled) {
-          setError('Failed to load PDF. Please try refreshing.');
+          setError(
+            err.name === 'MissingPDFException' || err.status === 404
+              ? 'Question PDF file could not be found on the server (404).'
+              : 'Failed to load PDF in viewer.'
+          );
           setLoading(false);
         }
       }
@@ -49,7 +73,7 @@ export default function PDFViewer({ pdfUrl }) {
 
     loadPdf();
     return () => { cancelled = true; };
-  }, [pdfUrl]);
+  }, [pdfUrl, reloadCount]);
 
   return (
     <div ref={containerRef} style={{ minHeight: '100%' }}>
@@ -66,6 +90,18 @@ export default function PDFViewer({ pdfUrl }) {
           📄 {pdf ? `${pdf.numPages} page${pdf.numPages !== 1 ? 's' : ''}` : ''}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {pdfUrl && (
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-outline btn-sm"
+              title="Open PDF in new tab"
+              style={{ fontSize: '0.75rem', textDecoration: 'none', padding: '4px 8px' }}
+            >
+              ↗ Open
+            </a>
+          )}
           <button
             className="btn btn-outline btn-sm"
             onClick={() => setScale((s) => Math.max(0.5, s - 0.2))}
@@ -100,10 +136,38 @@ export default function PDFViewer({ pdfUrl }) {
 
       {error && (
         <div style={{
-          padding: '2rem', textAlign: 'center',
-          color: 'var(--accent-red)'
+          padding: '2rem 1rem', textAlign: 'center',
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px solid rgba(239, 68, 68, 0.25)',
+          borderRadius: '8px', margin: '1rem',
+          color: 'var(--text-primary)'
         }}>
-          ⚠️ {error}
+          <div style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>⚠️</div>
+          <div style={{ color: 'var(--accent-red)', fontWeight: 600, marginBottom: '0.5rem' }}>
+            {error}
+          </div>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: '1.25rem', maxWidth: '400px', margin: '0 auto 1.25rem' }}>
+            The exam question PDF could not be rendered inside the page. You can retry loading or open the document directly.
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setReloadCount((c) => c + 1)}
+            >
+              🔄 Retry Loading
+            </button>
+            {pdfUrl && (
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary btn-sm"
+                style={{ textDecoration: 'none' }}
+              >
+                📄 Open PDF File
+              </a>
+            )}
+          </div>
         </div>
       )}
 

@@ -58,11 +58,23 @@ router.get('/:id', protect, async (req, res) => {
       examId: exam._id,
     });
 
-    // Build PDF URL (Direct Supabase Cloud URL or local upload path)
+    // Build PDF URL (Direct Supabase Cloud URL or normalized local upload path)
     let pdfUrl = exam.pdfPath;
     if (exam.pdfPath && !exam.pdfPath.startsWith('http')) {
-      const pdfRelative = path.relative(path.join(__dirname, '..'), exam.pdfPath);
-      pdfUrl = `/${pdfRelative.replace(/\\/g, '/')}`;
+      if (exam.pdfPath.startsWith('/uploads/')) {
+        pdfUrl = exam.pdfPath;
+      } else if (exam.pdfPath.startsWith('uploads/')) {
+        pdfUrl = `/${exam.pdfPath}`;
+      } else if (path.isAbsolute(exam.pdfPath)) {
+        const uploadsIdx = exam.pdfPath.indexOf('uploads');
+        if (uploadsIdx !== -1) {
+          pdfUrl = `/${exam.pdfPath.slice(uploadsIdx).replace(/\\/g, '/')}`;
+        } else {
+          pdfUrl = `/uploads/pdfs/${path.basename(exam.pdfPath)}`;
+        }
+      } else {
+        pdfUrl = `/uploads/pdfs/${path.basename(exam.pdfPath)}`;
+      }
     }
 
     res.json({
@@ -84,6 +96,46 @@ router.get('/:id', protect, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ─── GET /api/exam/:id/pdf ────────────────────────────────────────────────────
+// Stream question PDF directly or redirect to cloud URL
+router.get('/:id/pdf', protect, async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.id);
+    if (!exam || !exam.isActive) {
+      return res.status(404).json({ message: 'Exam not found or not active' });
+    }
+
+    if (!exam.pdfPath) {
+      return res.status(404).json({ message: 'Exam PDF not available' });
+    }
+
+    if (exam.pdfPath.startsWith('http://') || exam.pdfPath.startsWith('https://')) {
+      return res.redirect(exam.pdfPath);
+    }
+
+    let localPath = exam.pdfPath;
+    if (!path.isAbsolute(localPath)) {
+      localPath = path.join(__dirname, '..', localPath.replace(/^\//, ''));
+    }
+
+    if (!fs.existsSync(localPath)) {
+      const filename = path.basename(exam.pdfPath);
+      const altPath = path.join(__dirname, '../uploads/pdfs', filename);
+      if (fs.existsSync(altPath)) {
+        localPath = altPath;
+      } else {
+        return res.status(404).json({ message: 'PDF file not found on server' });
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(exam.pdfOriginalName || 'question.pdf')}"`);
+    fs.createReadStream(localPath).pipe(res);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch exam PDF', error: error.message });
   }
 });
 

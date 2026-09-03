@@ -260,8 +260,13 @@ router.delete('/exam/:id', adminOnly, async (req, res) => {
     if (exam.pdfPath) {
       if (exam.pdfPath.startsWith('http')) {
         await deleteFromSupabase(exam.pdfPath);
-      } else if (fs.existsSync(exam.pdfPath)) {
-        fs.unlinkSync(exam.pdfPath);
+      } else {
+        const localPath = path.isAbsolute(exam.pdfPath)
+          ? exam.pdfPath
+          : path.join(__dirname, '..', exam.pdfPath.replace(/^\//, ''));
+        if (fs.existsSync(localPath)) {
+          try { fs.unlinkSync(localPath); } catch {}
+        }
       }
     }
 

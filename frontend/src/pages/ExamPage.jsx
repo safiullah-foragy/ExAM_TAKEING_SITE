@@ -114,7 +114,14 @@ export default function ExamPage() {
 
   const answeredCount = Object.keys(answers).length;
   const totalQ = exam.totalQuestions;
-  const pdfUrl = exam.pdfUrl?.startsWith('http') ? exam.pdfUrl : `${API_ORIGIN || 'http://localhost:5000'}${exam.pdfUrl}`;
+  const formatPdfUrl = (url, examId) => {
+    if (!url && examId) return API_ORIGIN ? `${API_ORIGIN}/api/exam/${examId}/pdf` : `/api/exam/${examId}/pdf`;
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    return API_ORIGIN ? `${API_ORIGIN}${cleanUrl}` : cleanUrl;
+  };
+  const pdfUrl = formatPdfUrl(exam.pdfUrl, exam._id);
 
   return (
     <div className="exam-page">

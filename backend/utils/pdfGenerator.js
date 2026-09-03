@@ -24,6 +24,17 @@ const getFileBuffer = async (filePathOrUrl) => {
     if (fs.existsSync(filePathOrUrl)) {
       return fs.readFileSync(filePathOrUrl);
     }
+    const resolvedPath = path.join(__dirname, '..', filePathOrUrl.replace(/^\//, ''));
+    if (fs.existsSync(resolvedPath)) {
+      return fs.readFileSync(resolvedPath);
+    }
+    const filename = path.basename(filePathOrUrl);
+    for (const sub of ['pdfs', 'photos', 'results']) {
+      const checkPath = path.join(__dirname, `../uploads/${sub}`, filename);
+      if (fs.existsSync(checkPath)) {
+        return fs.readFileSync(checkPath);
+      }
+    }
     return null;
   } catch (err) {
     console.error(`Error loading buffer from ${filePathOrUrl}:`, err.message);
