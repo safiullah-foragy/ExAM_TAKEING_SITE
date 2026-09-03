@@ -2,12 +2,24 @@ const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 
 const supabaseUrl = (process.env.SUPABASE_URL || '').trim().replace(/^["']|["']$/g, '');
-const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim().replace(/^["']|["']$/g, '');
+const supabaseKey = (
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_KEY ||
+  ''
+).trim().replace(/^["']|["']$/g, '');
 
-const supabase = createClient(
-  supabaseUrl,
-  supabaseKey
+const isSupabaseConfigured = Boolean(
+  supabaseUrl &&
+  supabaseUrl.startsWith('http') &&
+  supabaseKey &&
+  supabaseKey.length > 10 &&
+  !supabaseUrl.includes('<project-ref>')
 );
+
+const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
 
 const BUCKET = (process.env.SUPABASE_BUCKET || 'exam-files').trim().replace(/^["']|["']$/g, '');
 
@@ -19,6 +31,10 @@ const BUCKET = (process.env.SUPABASE_BUCKET || 'exam-files').trim().replace(/^["
  * @returns {Promise<string>} Public URL of uploaded file
  */
 const uploadToSupabase = async (localFilePath, destinationPath, contentType) => {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase storage is not configured or credentials missing');
+  }
+
   const fileBuffer = fs.readFileSync(localFilePath);
 
   const options = {
@@ -43,7 +59,7 @@ const uploadToSupabase = async (localFilePath, destinationPath, contentType) => 
  * @param {string} filePath - Storage path or public URL
  */
 const deleteFromSupabase = async (filePath) => {
-  if (!filePath) return;
+  if (!filePath || !isSupabaseConfigured || !supabase) return;
   try {
     let storagePath = filePath;
     // If it's a full public URL, extract the relative path inside the bucket
@@ -58,6 +74,7 @@ const deleteFromSupabase = async (filePath) => {
 
 module.exports = {
   supabase,
+  isSupabaseConfigured,
   uploadToSupabase,
   deleteFromSupabase,
   BUCKET,

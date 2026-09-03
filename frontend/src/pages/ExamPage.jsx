@@ -115,11 +115,16 @@ export default function ExamPage() {
   const answeredCount = Object.keys(answers).length;
   const totalQ = exam.totalQuestions;
   const formatPdfUrl = (url, examId) => {
-    if (!url && examId) return API_ORIGIN ? `${API_ORIGIN}/api/exam/${examId}/pdf` : `/api/exam/${examId}/pdf`;
-    if (!url) return '';
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
-    return API_ORIGIN ? `${API_ORIGIN}${cleanUrl}` : cleanUrl;
+    const token = localStorage.getItem('token');
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+      return url;
+    }
+
+    const cleanPath = url && url.startsWith('/api/') ? url : `/api/exam/${examId}/pdf`;
+    const base = API_ORIGIN ? `${API_ORIGIN}${cleanPath}` : cleanPath;
+    return `${base}${tokenParam}`;
   };
   const pdfUrl = formatPdfUrl(exam.pdfUrl, exam._id);
 

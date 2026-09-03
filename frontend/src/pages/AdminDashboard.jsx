@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   const [pdfFile, setPdfFile] = useState(null);
   const [csvFile, setCsvFile] = useState(null);
   const [editingExam, setEditingExam] = useState(null);
+  const [editPdfFile, setEditPdfFile] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editForm, setEditForm] = useState({
     title: '',
@@ -61,6 +62,7 @@ export default function AdminDashboard() {
 
   const handleOpenEdit = (exam) => {
     setEditingExam(exam);
+    setEditPdfFile(null);
     setEditForm({
       title: exam.title || '',
       author: exam.author || '',
@@ -78,12 +80,21 @@ export default function AdminDashboard() {
     if (!editingExam) return;
     setSavingEdit(true);
     try {
-      const res = await adminApi.put(`/admin/exam/${editingExam._id}`, editForm);
+      const formData = new FormData();
+      Object.entries(editForm).forEach(([key, val]) => {
+        if (val !== undefined && val !== null) formData.append(key, val);
+      });
+      if (editPdfFile) {
+        formData.append('questionPdf', editPdfFile);
+      }
+
+      const res = await adminApi.put(`/admin/exam/${editingExam._id}`, formData);
       setExams((prev) =>
         prev.map((ex) => (ex._id === editingExam._id ? { ...ex, ...res.data.exam } : ex))
       );
       toast.success('Exam updated successfully! 🎉');
       setEditingExam(null);
+      setEditPdfFile(null);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update exam');
     } finally {
@@ -959,6 +970,24 @@ export default function AdminDashboard() {
                     value={editForm.negativeMark}
                     onChange={(e) => setEditForm((f) => ({ ...f, negativeMark: e.target.value }))}
                   />
+                </div>
+
+                <div className="form-group" style={{ gridColumn: '1/-1', background: 'rgba(99,102,241,0.06)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(99,102,241,0.2)' }}>
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--primary-light)' }}>📄 Re-upload Question PDF (Optional)</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {editPdfFile ? `Selected: ${editPdfFile.name}` : (editingExam.pdfOriginalName ? `Current: ${editingExam.pdfOriginalName}` : 'Keep current file')}
+                    </span>
+                  </label>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="form-input"
+                    onChange={(e) => setEditPdfFile(e.target.files[0] || null)}
+                  />
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                    💡 If students see a 404 or cannot load the PDF, choose the question PDF here and save. It will be stored persistently in MongoDB GridFS.
+                  </p>
                 </div>
               </div>
 

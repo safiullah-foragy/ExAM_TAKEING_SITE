@@ -10,6 +10,7 @@ const Submission = require('../models/Submission');
 const { adminOnly } = require('../middleware/auth');
 const { parseAnswerCSV } = require('../utils/csvParser');
 const { uploadToSupabase, deleteFromSupabase } = require('../utils/supabaseStorage');
+const { uploadToGridFS, deleteFromGridFS, existsInGridFS } = require('../utils/gridfsStorage');
 const { sendNewExamNotificationEmail, sendBroadcastEmail } = require('../utils/mailer');
 const { generateMasterExamResultPDF } = require('../utils/pdfGenerator');
 
@@ -77,35 +78,47 @@ router.post(
   ]),
   async (req, res) => {
     try {
-      const { title, author, totalTime, totalMarks, passMarks, marksPerMCQ, negativeMark, totalQuestions } = req.body;
+      const {
+        title,
+        author,
+        totalTime,
+        totalMarks,
+        passMarks,
+        marksPerMCQ,
+        negativeMark,
+        totalQuestions,
+      } = req.body;
 
       if (!title || !author || !totalTime || !totalMarks || !passMarks) {
-        return res.status(400).json({ message: 'All exam fields are required' });
+        return res.status(400).json({ message: 'All required fields must be filled' });
       }
 
       if (!req.files?.questionPdf) {
-        return res.status(400).json({ message: 'Question PDF is required' });
+        return res.status(400).json({ message: 'Question PDF file is required' });
       }
+
       if (!req.files?.answerCsv) {
-        return res.status(400).json({ message: 'Answer CSV is required' });
+        return res.status(400).json({ message: 'Answer key CSV file is required' });
       }
 
       const pdfFile = req.files.questionPdf[0];
       const csvFile = req.files.answerCsv[0];
 
-      // Parse CSV answer key
+      // Parse CSV
       let answerKey;
       try {
-        answerKey = parseAnswerCSV(csvFile.path);
-      } catch (csvErr) {
-        // Cleanup uploaded files
-        if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
+        answerKey = await parseAnswerCSV(csvFile.path);
+      } catch (parseErr) {
         if (fs.existsSync(csvFile.path)) fs.unlinkSync(csvFile.path);
-        return res.status(400).json({ message: `CSV parse error: ${csvErr.message}` });
+        return res.status(400).json({ message: parseErr.message });
       }
 
-      // Clean up CSV file (answers are stored in DB)
+      // Clean up CSV temp file
       if (fs.existsSync(csvFile.path)) fs.unlinkSync(csvFile.path);
+
+      if (!answerKey || answerKey.length === 0) {
+        return res.status(400).json({ message: 'Answer key CSV has no valid rows' });
+      }
 
       // Determine requested question count
       const parsedMarksPerMCQ = marksPerMCQ ? Number(marksPerMCQ) : 1;
@@ -118,18 +131,23 @@ router.post(
         answerKey = answerKey.slice(0, expectedQuestions);
       }
 
-      // Upload Question PDF to Supabase Storage (with local server storage fallback)
+      // 1. Always store Question PDF persistently in MongoDB GridFS
+      let gridFsFileId = null;
+      try {
+        const gridResult = await uploadToGridFS(pdfFile.path, pdfFile.originalname, 'application/pdf');
+        gridFsFileId = gridResult.fileId;
+      } catch (gridErr) {
+        console.error('GridFS storage error:', gridErr.message);
+      }
+
+      // 2. Also upload to Supabase Storage if configured
       const unique = `${Date.now()}_${Math.round(Math.random() * 1e9)}`;
       const destPath = `pdfs/${unique}_${pdfFile.originalname.replace(/\s+/g, '_')}`;
-      let publicPdfUrl;
+      let publicPdfUrl = null;
       try {
         publicPdfUrl = await uploadToSupabase(pdfFile.path, destPath, 'application/pdf');
-        // Clean up local temp PDF file if uploaded to cloud
-        if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path);
       } catch (uploadErr) {
-        console.error('Supabase upload failed, falling back to local server storage:', uploadErr.message);
-        // Fallback: keep local file in /uploads/pdfs/ and serve statically
-        publicPdfUrl = `/uploads/pdfs/${path.basename(pdfFile.path)}`;
+        console.warn('Supabase upload not used or failed:', uploadErr.message);
       }
 
       const exam = new Exam({
@@ -140,13 +158,25 @@ router.post(
         passMarks: Number(passMarks),
         marksPerMCQ: parsedMarksPerMCQ,
         negativeMark: negativeMark ? Number(negativeMark) : 0,
-        pdfPath: publicPdfUrl,
+        pdfPath: publicPdfUrl || `/uploads/pdfs/${path.basename(pdfFile.path)}`,
+        pdfGridFSId: gridFsFileId,
         pdfOriginalName: pdfFile.originalname,
         totalQuestions: answerKey.length,
         answerKey,
       });
 
       await exam.save();
+
+      // If not on Supabase, point pdfPath directly to the streaming endpoint
+      if (!publicPdfUrl) {
+        exam.pdfPath = `/api/exam/${exam._id}/pdf`;
+        await exam.save();
+      }
+
+      // Clean up local temp file if safely stored in GridFS or Supabase
+      if (gridFsFileId || publicPdfUrl) {
+        try { if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path); } catch {}
+      }
 
       // Send email notification to all registered & verified users
       User.find({ isVerified: true })
@@ -172,7 +202,7 @@ router.post(
           passMarks: exam.passMarks,
           marksPerMCQ: exam.marksPerMCQ,
           totalQuestions: exam.totalQuestions,
-          pdfUrl: publicPdfUrl,
+          pdfUrl: exam.pdfPath,
           createdAt: exam.createdAt,
         },
       });
@@ -207,7 +237,7 @@ router.get('/exam/:id', adminOnly, async (req, res) => {
 });
 
 // ─── PUT /api/admin/exam/:id ──────────────────────────────────────────────────
-router.put('/exam/:id', adminOnly, async (req, res) => {
+router.put('/exam/:id', adminOnly, upload.single('questionPdf'), async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.id);
     if (!exam) return res.status(404).json({ message: 'Exam not found' });
@@ -226,6 +256,42 @@ router.put('/exam/:id', adminOnly, async (req, res) => {
       exam.totalQuestions = qNum;
       if (exam.answerKey && exam.answerKey.length > qNum) {
         exam.answerKey = exam.answerKey.slice(0, qNum);
+      }
+    }
+
+    // Handle optional Question PDF update / replacement
+    if (req.file) {
+      const pdfFile = req.file;
+
+      // 1. Upload to GridFS
+      try {
+        const gridResult = await uploadToGridFS(pdfFile.path, pdfFile.originalname, 'application/pdf');
+        if (exam.pdfGridFSId) {
+          await deleteFromGridFS(exam.pdfGridFSId);
+        }
+        exam.pdfGridFSId = gridResult.fileId;
+      } catch (gridErr) {
+        console.error('GridFS replacement failed:', gridErr.message);
+      }
+
+      // 2. Upload to Supabase if configured
+      const unique = `${Date.now()}_${Math.round(Math.random() * 1e9)}`;
+      const destPath = `pdfs/${unique}_${pdfFile.originalname.replace(/\s+/g, '_')}`;
+      let publicPdfUrl = null;
+      try {
+        publicPdfUrl = await uploadToSupabase(pdfFile.path, destPath, 'application/pdf');
+        if (exam.pdfPath && exam.pdfPath.startsWith('http')) {
+          await deleteFromSupabase(exam.pdfPath);
+        }
+      } catch (supaErr) {
+        console.warn('Supabase upload not used:', supaErr.message);
+      }
+
+      exam.pdfOriginalName = pdfFile.originalname;
+      exam.pdfPath = publicPdfUrl || `/api/exam/${exam._id}/pdf`;
+
+      if (exam.pdfGridFSId || publicPdfUrl) {
+        try { if (fs.existsSync(pdfFile.path)) fs.unlinkSync(pdfFile.path); } catch {}
       }
     }
 
@@ -255,6 +321,11 @@ router.delete('/exam/:id', adminOnly, async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.id);
     if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
+    // Delete PDF from GridFS
+    if (exam.pdfGridFSId) {
+      await deleteFromGridFS(exam.pdfGridFSId);
+    }
 
     // Delete PDF from Supabase Storage or local
     if (exam.pdfPath) {

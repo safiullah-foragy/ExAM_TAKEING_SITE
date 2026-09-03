@@ -37,8 +37,12 @@ export default function PDFViewer({ pdfUrl }) {
 
     const loadPdf = async () => {
       try {
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
         const loadingTask = pdfjsLib.getDocument({
           url: pdfUrl,
+          httpHeaders: headers,
           withCredentials: false,
           cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '4.10.38'}/cmaps/`,
           cMapPacked: true,

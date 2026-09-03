@@ -49,6 +49,10 @@ const examSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Question PDF is required'],
     },
+    pdfGridFSId: {
+      type: String,
+      default: null,
+    },
     pdfOriginalName: {
       type: String,
     },
