@@ -12,20 +12,29 @@ const userRoutes = require('./routes/user');
 const app = express();
 
 // Middleware
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (
       origin.includes('localhost') ||
+      origin.includes('127.0.0.1') ||
       origin.includes('vercel.app') ||
-      (process.env.CLIENT_URL && origin === process.env.CLIENT_URL)
+      origin.includes('onrender.com') ||
+      (process.env.CLIENT_URL && origin.startsWith(process.env.CLIENT_URL.replace(/\/$/, '')))
     ) {
       return callback(null, true);
     }
     return callback(null, true);
   },
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Disposition'],
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
