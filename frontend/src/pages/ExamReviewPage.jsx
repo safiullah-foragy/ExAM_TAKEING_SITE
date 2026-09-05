@@ -20,6 +20,8 @@ export default function ExamReviewPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // 'all' | 'correct' | 'wrong' | 'skipped'
+  const [mobileView, setMobileView] = useState('split'); // 'split' | 'solutions' | 'pdf'
+  const [showNotice, setShowNotice] = useState(true);
 
   useEffect(() => {
     const fetchReview = async () => {
@@ -121,10 +123,10 @@ export default function ExamReviewPage() {
   };
 
   return (
-    <div className="review-page">
+    <div className={`review-page mobile-mode-${mobileView}`}>
       {/* Top Bar */}
       <div className="review-topbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', overflow: 'hidden' }}>
+        <div className="review-topbar-left" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
           <button
             id="review-back-btn"
             className="btn btn-outline btn-sm"
@@ -135,68 +137,108 @@ export default function ExamReviewPage() {
           </button>
           <div className="review-topbar-title">
             <span>📝</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {exam.title} — Solutions & Review
+            <span className="review-title-text" title={exam.title}>
+              {exam.title}
             </span>
           </div>
         </div>
 
         {/* Stats and Action Header */}
-        <div className="review-header-stats" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span className="badge badge-primary" style={{ fontSize: '0.72rem' }} title="Evaluation is locked to your 1st exam attempt">
-            ⭐ 1st Exam Record
+        <div className="review-header-stats">
+          <span className="badge badge-primary badge-attempt" title="Evaluation is locked to your 1st exam attempt">
+            ⭐ 1st Attempt
           </span>
           <span className={`badge ${submission.passed ? 'badge-success' : 'badge-danger'}`}>
             {submission.passed ? '✓ Passed' : '✗ Failed'} ({submission.score}/{exam.totalMarks})
           </span>
           <button
             id="review-retake-btn"
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary btn-sm review-topbar-retake"
             onClick={handleRetake}
           >
-            ↺ Practice Retake
+            ↺ Retake
           </button>
         </div>
       </div>
 
-      {/* Main Split Body */}
-      <div className="exam-body">
+      {/* Mobile View Switcher Tabs (visible on mobile only) */}
+      <div className="mobile-view-tabs" role="tablist" aria-label="Review view mode">
+        <button
+          type="button"
+          className={`mobile-view-tab ${mobileView === 'solutions' ? 'active' : ''}`}
+          onClick={() => setMobileView('solutions')}
+          title="Show solutions in full screen"
+        >
+          <span>📋</span> Solutions & Key ({submission.correct}/{exam.totalQuestions})
+        </button>
+        <button
+          type="button"
+          className={`mobile-view-tab ${mobileView === 'split' ? 'active' : ''}`}
+          onClick={() => setMobileView('split')}
+          title="Show both question paper and solutions"
+        >
+          <span>◫</span> Split View
+        </button>
+        <button
+          type="button"
+          className={`mobile-view-tab ${mobileView === 'pdf' ? 'active' : ''}`}
+          onClick={() => setMobileView('pdf')}
+          title="Show question paper in full screen"
+        >
+          <span>📄</span> Question Paper
+        </button>
+      </div>
+
+      {/* Main Body */}
+      <div className={`exam-body review-exam-body mobile-view-${mobileView}`}>
         {/* Left Pane: Question Paper PDF */}
-        <div className="exam-pdf-pane">
+        <div className="exam-pdf-pane review-pdf-pane">
           <PDFViewer pdfUrl={pdfUrl} />
         </div>
 
         {/* Right Pane: Solutions & Answers */}
-        <div className="exam-answer-pane" style={{ width: '400px' }}>
+        <div className="exam-answer-pane review-answer-pane">
           {/* Header & Filter Controls */}
           <div className="review-pane-header">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
-                📋 Answer Key & Solutions
+            <div className="review-pane-header-row">
+              <div className="review-pane-heading">
+                <span className="review-heading-title">📋 Answer Key & Solutions</span>
+                <span className="review-heading-score">
+                  {submission.correct}/{exam.totalQuestions} Correct
+                </span>
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {submission.correct}/{exam.totalQuestions} Correct
+              <div className="review-pane-header-actions">
+                <button
+                  type="button"
+                  className="btn btn-outline btn-xs mobile-expand-toggle"
+                  onClick={() => setMobileView(mobileView === 'solutions' ? 'split' : 'solutions')}
+                  title={mobileView === 'solutions' ? 'Switch to split view' : 'Expand solutions to full screen'}
+                >
+                  {mobileView === 'solutions' ? '⤡ Split View' : '⤢ Full View'}
+                </button>
               </div>
             </div>
 
             {/* Official 1st attempt note */}
-            <div style={{
-              fontSize: '0.72rem',
-              color: 'var(--text-secondary)',
-              background: 'rgba(99, 102, 241, 0.08)',
-              border: '1px solid rgba(99, 102, 241, 0.2)',
-              padding: '0.35rem 0.6rem',
-              borderRadius: 'var(--radius-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              lineHeight: '1.3'
-            }}>
-              <span>📌</span>
-              <span>
-                Answers shown below are from your <strong>1st (official) exam attempt</strong>. Retakes are for practice.
-              </span>
-            </div>
+            {showNotice && (
+              <div className="review-attempt-notice">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 1, minWidth: 0 }}>
+                  <span>📌</span>
+                  <span>
+                    Answers from <strong>1st official exam attempt</strong>. Retakes are practice.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="notice-dismiss-btn"
+                  onClick={() => setShowNotice(false)}
+                  title="Dismiss note"
+                  aria-label="Dismiss note"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
             {/* Filter Pills */}
             <div className="review-filter-tabs">
@@ -320,25 +362,15 @@ export default function ExamReviewPage() {
           </div>
 
           {/* Footer note and legend */}
-          <div className="answer-pane-footer">
-            <div
-              style={{
-                fontSize: '0.72rem',
-                color: 'var(--text-muted)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '0.4rem',
-                marginBottom: '0.75rem',
-              }}
-            >
+          <div className="answer-pane-footer review-pane-footer">
+            <div className="review-legend-row">
               <span style={{ color: '#34d399' }}>● Correct Answer</span>
               <span style={{ color: '#f87171' }}>● Wrong Selected</span>
               <span style={{ color: '#94a3b8' }}>○ Skipped</span>
             </div>
             <button
               id="review-retake-footer-btn"
-              className="btn btn-primary btn-full"
+              className="btn btn-primary btn-full review-retake-footer-btn"
               onClick={handleRetake}
             >
               ↺ Retake This Exam
