@@ -1336,7 +1336,7 @@ export default function AdminDashboard() {
                       className="form-input"
                       value={adminProfile.name || ''}
                       onChange={(e) => setAdminProfile((p) => ({ ...p, name: e.target.value }))}
-                      placeholder="e.g. Exam Controller / Safiullah Foragy"
+                      placeholder="e.g. Exam Controller / Sofi"
                       required
                     />
                   </div>

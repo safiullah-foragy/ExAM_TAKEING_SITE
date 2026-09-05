@@ -112,7 +112,7 @@ export default function SignupPage() {
                 name="name"
                 type="text"
                 className="form-input"
-                placeholder="e.g. Safiullah Foragy"
+                placeholder="e.g. Sofi"
                 value={form.name}
                 onChange={handleChange}
                 required
