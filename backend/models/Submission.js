@@ -57,6 +57,21 @@ const submissionSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    // Explicit 1st attempt snapshot (main evaluation is always 1st exam)
+    firstAnswers: [answerSchema],
+    firstScore: { type: Number },
+    firstCorrect: { type: Number },
+    firstWrong: { type: Number },
+    firstSkipped: { type: Number },
+    firstPassed: { type: Boolean },
+    firstSubmittedAt: { type: Date },
+    firstTimeTaken: { type: Number },
+
+    // Practice / retake tracking
+    retakeCount: { type: Number, default: 0 },
+    lastPracticeScore: { type: Number },
+    lastPracticeAnswers: [answerSchema],
+    lastPracticeSubmittedAt: { type: Date },
   },
   { timestamps: true }
 );

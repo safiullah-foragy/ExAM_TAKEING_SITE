@@ -59,6 +59,148 @@ export default function AdminDashboard() {
   const [mailDeliveryReport, setMailDeliveryReport] = useState(null);
   const [showMailConfirmModal, setShowMailConfirmModal] = useState(false);
 
+  // Manage Users States
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [userFilter, setUserFilter] = useState('all'); // 'all' | 'active' | 'deactivated'
+  const [userStats, setUserStats] = useState({ totalUsers: 0, activeUsers: 0, deactivatedUsers: 0, verifiedUsers: 0 });
+  const [togglingUserId, setTogglingUserId] = useState(null);
+  const [deletingUser, setDeletingUser] = useState(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+
+  const fetchUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const res = await adminApi.get('/admin/users');
+      setUsers(res.data.users || []);
+      if (res.data.stats) setUserStats(res.data.stats);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to load users');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'users') {
+      fetchUsers();
+    }
+  }, [tab]);
+
+  // Admin Profile & Chat States
+  const [adminProfile, setAdminProfile] = useState({ name: 'Exam Authority', title: 'Head Administrator', photo: null, email: '' });
+  const [loadingAdminProfile, setLoadingAdminProfile] = useState(false);
+  const [savingAdminProfile, setSavingAdminProfile] = useState(false);
+  const [uploadingAdminPhoto, setUploadingAdminPhoto] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+
+  const fetchAdminProfile = async () => {
+    setLoadingAdminProfile(true);
+    try {
+      const res = await adminApi.get('/admin/profile');
+      if (res.data.admin) setAdminProfile(res.data.admin);
+    } catch (err) {
+      console.error('Failed to fetch admin profile', err);
+    } finally {
+      setLoadingAdminProfile(false);
+    }
+  };
+
+  const fetchChatUnread = async () => {
+    try {
+      const res = await adminApi.get('/chat/unread-count');
+      setChatUnreadCount(res.data.unreadCount || 0);
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchAdminProfile();
+    fetchChatUnread();
+    const interval = setInterval(fetchChatUnread, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleAdminPhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return toast.error('Please select an image file');
+    setUploadingAdminPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      const res = await adminApi.put('/admin/photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setAdminProfile((prev) => ({ ...prev, photo: res.data.photo }));
+      toast.success('Admin photo updated successfully!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to upload photo');
+    } finally {
+      setUploadingAdminPhoto(false);
+    }
+  };
+
+  const handleSaveAdminProfile = async (e) => {
+    e.preventDefault();
+    setSavingAdminProfile(true);
+    try {
+      const res = await adminApi.put('/admin/profile', {
+        name: adminProfile.name,
+        title: adminProfile.title,
+      });
+      setAdminProfile((prev) => ({ ...prev, ...res.data.admin }));
+      toast.success('Admin profile updated successfully!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSavingAdminProfile(false);
+    }
+  };
+
+  const handleToggleUserStatus = async (user) => {
+    setTogglingUserId(user._id);
+    try {
+      const res = await adminApi.put(`/admin/user/${user._id}/toggle-status`);
+      const updatedIsActive = res.data.user.isActive;
+      setUsers((prev) =>
+        prev.map((u) => (u._id === user._id ? { ...u, isActive: updatedIsActive } : u))
+      );
+      setUserStats((prev) => ({
+        ...prev,
+        activeUsers: updatedIsActive ? prev.activeUsers + 1 : prev.activeUsers - 1,
+        deactivatedUsers: updatedIsActive ? prev.deactivatedUsers - 1 : prev.deactivatedUsers + 1,
+      }));
+      toast.success(res.data.message || 'User status updated');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update user status');
+    } finally {
+      setTogglingUserId(null);
+    }
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    if (!deletingUser) return;
+    setIsDeletingUser(true);
+    try {
+      const res = await adminApi.delete(`/admin/user/${deletingUser._id}`);
+      setUsers((prev) => prev.filter((u) => u._id !== deletingUser._id));
+      setUserStats((prev) => ({
+        ...prev,
+        totalUsers: Math.max(0, prev.totalUsers - 1),
+        activeUsers: deletingUser.isActive ? Math.max(0, prev.activeUsers - 1) : prev.activeUsers,
+        deactivatedUsers: !deletingUser.isActive ? Math.max(0, prev.deactivatedUsers - 1) : prev.deactivatedUsers,
+        verifiedUsers: deletingUser.isVerified ? Math.max(0, prev.verifiedUsers - 1) : prev.verifiedUsers,
+      }));
+      toast.success(res.data.message || 'User deleted successfully');
+      setDeletingUser(null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete user');
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
+
 
   const handleOpenEdit = (exam) => {
     setEditingExam(exam);
@@ -356,6 +498,16 @@ export default function AdminDashboard() {
     } catch { toast.error('Failed to delete exam'); }
   };
 
+  const filteredUsers = users.filter((u) => {
+    const matchesSearch =
+      (u.name || '').toLowerCase().includes(userSearch.toLowerCase()) ||
+      (u.email || '').toLowerCase().includes(userSearch.toLowerCase());
+    if (!matchesSearch) return false;
+    if (userFilter === 'active') return u.isActive;
+    if (userFilter === 'deactivated') return !u.isActive;
+    return true;
+  });
+
   return (
     <>
       <nav className="navbar">
@@ -366,7 +518,22 @@ export default function AdminDashboard() {
               Admin Panel
             </span>
           </div>
-          <button id="admin-logout-btn" className="btn btn-outline btn-sm" onClick={handleLogout}>Sign Out</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button
+              id="admin-messages-nav-btn"
+              className="btn btn-outline btn-sm nav-chat-btn"
+              onClick={() => navigate('/messages')}
+              title="Open Messenger"
+            >
+              💬 Messages
+              {chatUnreadCount > 0 && (
+                <span className="nav-unread-badge">
+                  {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+                </span>
+              )}
+            </button>
+            <button id="admin-logout-btn" className="btn btn-outline btn-sm" onClick={handleLogout}>Sign Out</button>
+          </div>
         </div>
       </nav>
 
@@ -384,10 +551,33 @@ export default function AdminDashboard() {
               onClick={() => setTab('exams')}
             >📋 Manage Exams</div>
             <div
+              id="tab-users"
+              className={`admin-tab${tab === 'users' ? ' active' : ''}`}
+              onClick={() => setTab('users')}
+            >👥 Manage Users</div>
+            <div
               id="tab-mail"
               className={`admin-tab${tab === 'mail' ? ' active' : ''}`}
               onClick={() => setTab('mail')}
             >✉️ Broadcast Mail</div>
+            <div
+              id="tab-messages"
+              className={`admin-tab${tab === 'messages' ? ' active' : ''}`}
+              onClick={() => navigate('/messages')}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}
+            >
+              💬 Messages
+              {chatUnreadCount > 0 && (
+                <span className="admin-tab-badge">
+                  {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+                </span>
+              )}
+            </div>
+            <div
+              id="tab-profile"
+              className={`admin-tab${tab === 'profile' ? ' active' : ''}`}
+              onClick={() => { setTab('profile'); fetchAdminProfile(); }}
+            >👤 Admin Profile</div>
           </div>
 
           {/* ── Create Exam Tab ── */}
@@ -839,6 +1029,355 @@ export default function AdminDashboard() {
               )}
             </div>
           )}
+
+          {/* ── Manage Users Tab ── */}
+          {tab === 'users' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* Header & Stats */}
+              <div className="glass" style={{ padding: '1.75rem 2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div>
+                    <h2 style={{ margin: '0 0 0.35rem 0', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      👥 Manage User Accounts
+                    </h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', margin: 0 }}>
+                      Monitor active and deactivated student accounts, review examination activity, and manage permissions.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={fetchUsers}
+                    disabled={loadingUsers}
+                    title="Refresh user list"
+                  >
+                    🔄 Refresh Users
+                  </button>
+                </div>
+
+                {/* Summary Stat Cards */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: '1rem'
+                }}>
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1rem 1.25rem',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      {userStats.totalUsers}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Total Registered
+                    </div>
+                  </div>
+
+                  <div style={{
+                    background: 'rgba(16, 185, 129, 0.08)',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1rem 1.25rem',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--accent-green)' }}>
+                      {userStats.activeUsers}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(16, 185, 129, 0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Active Accounts
+                    </div>
+                  </div>
+
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1rem 1.25rem',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--accent-red)' }}>
+                      {userStats.deactivatedUsers}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(239, 68, 68, 0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Deactivated Accounts
+                    </div>
+                  </div>
+
+                  <div style={{
+                    background: 'rgba(99, 102, 241, 0.08)',
+                    border: '1px solid rgba(99, 102, 241, 0.25)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1rem 1.25rem',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--primary-light)' }}>
+                      {userStats.verifiedUsers}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(99, 102, 241, 0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Verified Email
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter and Search Bar */}
+              <div className="glass" style={{ padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ flex: '1 1 280px', maxWidth: 450 }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="🔍 Search users by name or email…"
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status:</span>
+                  <button
+                    className={`btn btn-sm ${userFilter === 'all' ? 'btn-primary' : 'btn-outline'}`}
+                    onClick={() => setUserFilter('all')}
+                  >
+                    All ({users.length})
+                  </button>
+                  <button
+                    className={`btn btn-sm ${userFilter === 'active' ? 'btn-success' : 'btn-outline'}`}
+                    onClick={() => setUserFilter('active')}
+                  >
+                    Active ({users.filter(u => u.isActive).length})
+                  </button>
+                  <button
+                    className={`btn btn-sm ${userFilter === 'deactivated' ? 'btn-danger' : 'btn-outline'}`}
+                    onClick={() => setUserFilter('deactivated')}
+                  >
+                    Deactivated ({users.filter(u => !u.isActive).length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Users List / Table */}
+              <div className="glass" style={{ padding: '1.5rem', overflowX: 'auto' }}>
+                {loadingUsers ? (
+                  <div className="loader-wrap" style={{ minHeight: 200 }}>
+                    <div className="spinner" />
+                  </div>
+                ) : filteredUsers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>👥</div>
+                    <p style={{ margin: 0 }}>No users found matching your criteria.</p>
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: 680 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                        <th style={{ padding: '0.75rem 1rem' }}>User</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Account Status</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Email Verification</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Submissions</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Joined Date</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredUsers.map((u) => {
+                        const initials = u.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
+                        const photoSrc = u.photo
+                          ? (u.photo.startsWith('http') ? u.photo : `${API_ORIGIN || 'http://localhost:5000'}${u.photo}`)
+                          : null;
+                        const isToggling = togglingUserId === u._id;
+
+                        return (
+                          <tr
+                            key={u._id}
+                            style={{
+                              borderBottom: '1px solid rgba(255,255,255,0.05)',
+                              background: u.isActive ? 'transparent' : 'rgba(239, 68, 68, 0.04)',
+                            }}
+                          >
+                            <td style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{
+                                width: 38, height: 38, borderRadius: '50%', overflow: 'hidden',
+                                background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontWeight: 700, fontSize: '0.82rem', color: '#fff', flexShrink: 0
+                              }}>
+                                {photoSrc ? (
+                                  <img src={photoSrc} alt={u.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  initials || 'U'
+                                )}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+                                  {u.name}
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                  {u.email}
+                                </div>
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '1rem' }}>
+                              <span className={`badge ${u.isActive ? 'badge-success' : 'badge-danger'}`}>
+                                {u.isActive ? '● Active' : '● Deactivated'}
+                              </span>
+                            </td>
+
+                            <td style={{ padding: '1rem' }}>
+                              <span className={`badge ${u.isVerified ? 'badge-primary' : 'badge-amber'}`}>
+                                {u.isVerified ? '✓ Verified' : '⏳ Pending'}
+                              </span>
+                            </td>
+
+                            <td style={{ padding: '1rem', textAlign: 'center' }}>
+                              <span style={{
+                                fontSize: '0.85rem', fontWeight: 700,
+                                color: u.submissionsCount > 0 ? 'var(--primary-light)' : 'var(--text-muted)'
+                              }}>
+                                {u.submissionsCount}
+                              </span>
+                            </td>
+
+                            <td style={{ padding: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                              {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A'}
+                            </td>
+
+                            <td style={{ padding: '1rem', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                <button
+                                  className={`btn btn-sm ${u.isActive ? 'btn-outline' : 'btn-success'}`}
+                                  style={{
+                                    fontSize: '0.75rem', padding: '0.35rem 0.75rem',
+                                    borderColor: u.isActive ? 'rgba(245, 158, 11, 0.4)' : undefined,
+                                    color: u.isActive ? 'var(--accent-amber)' : undefined
+                                  }}
+                                  onClick={() => handleToggleUserStatus(u)}
+                                  disabled={isToggling}
+                                  title={u.isActive ? 'Deactivate user (stops user from logging in or taking exams)' : 'Activate user (allows login and participation)'}
+                                >
+                                  {isToggling ? 'Updating…' : (u.isActive ? '⏸ Deactivate' : '▶ Activate')}
+                                </button>
+
+                                <button
+                                  className="btn btn-danger btn-sm"
+                                  style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }}
+                                  onClick={() => setDeletingUser(u)}
+                                  title="Permanently delete user and data"
+                                >
+                                  🗑 Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Admin Profile Tab ── */}
+          {tab === 'profile' && (
+            <div className="admin-profile-container">
+              <div className="glass" style={{ padding: '2.5rem 2rem', borderRadius: 'var(--radius-lg)' }}>
+                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                  <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
+                    👤 Admin & Authority Profile
+                  </h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    Manage your display name, official title, and photo seen by students in the Messenger and system notices.
+                  </p>
+                </div>
+
+                {/* Avatar & Photo Upload */}
+                <div className="admin-profile-avatar-box">
+                  <div className="admin-avatar-large">
+                    {adminProfile.photo ? (
+                      <img
+                        src={adminProfile.photo.startsWith('http') ? adminProfile.photo : `${API_ORIGIN || 'http://localhost:5000'}${adminProfile.photo}`}
+                        alt="Admin"
+                      />
+                    ) : (
+                      '👑'
+                    )}
+                  </div>
+                  <label
+                    htmlFor="admin-photo-input"
+                    className="btn btn-outline btn-sm"
+                    style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    {uploadingAdminPhoto ? '⟳ Uploading...' : '📷 Change Admin Photo'}
+                    <input
+                      id="admin-photo-input"
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={handleAdminPhotoUpload}
+                      disabled={uploadingAdminPhoto}
+                    />
+                  </label>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    PNG, JPG, or WEBP up to 5MB
+                  </span>
+                </div>
+
+                {/* Edit Profile Form */}
+                <form onSubmit={handleSaveAdminProfile}>
+                  <div className="form-group" style={{ marginBottom: '1.2rem' }}>
+                    <label className="form-label">Authority / Admin Name *</label>
+                    <input
+                      id="admin-name-input"
+                      className="form-input"
+                      value={adminProfile.name || ''}
+                      onChange={(e) => setAdminProfile((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="e.g. Exam Controller / Safiullah Foragy"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: '1.2rem' }}>
+                    <label className="form-label">Official Designation / Title *</label>
+                    <input
+                      id="admin-title-input"
+                      className="form-input"
+                      value={adminProfile.title || ''}
+                      onChange={(e) => setAdminProfile((p) => ({ ...p, title: e.target.value }))}
+                      placeholder="e.g. Head Administrator / Exam Controller"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: '1.8rem' }}>
+                    <label className="form-label">Admin Email (Sign-in Identifier)</label>
+                    <input
+                      className="form-input"
+                      value={adminProfile.email || 'Admin Authority'}
+                      disabled
+                      style={{ opacity: 0.65, cursor: 'not-allowed' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                    <button
+                      id="admin-save-profile-btn"
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={savingAdminProfile}
+                      style={{ minWidth: 150 }}
+                    >
+                      {savingAdminProfile ? 'Saving...' : '💾 Save Profile'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1270,6 +1809,61 @@ export default function AdminDashboard() {
                 onClick={handleConfirmSendMail}
               >
                 🚀 Confirm &amp; Send Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete User Confirmation Modal ── */}
+      {deletingUser && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, backdropFilter: 'blur(6px)', padding: '1rem'
+        }}>
+          <div className="glass-elevated" style={{
+            padding: '2rem', maxWidth: 460, width: '100%',
+            borderRadius: 'var(--radius-lg)', textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>⚠️</div>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--accent-red)', fontSize: '1.25rem' }}>
+              Permanently Delete User?
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+              Are you sure you want to permanently delete user <strong style={{ color: 'var(--text-primary)' }}>{deletingUser.name}</strong> ({deletingUser.email})?
+            </p>
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem 1rem',
+              color: '#f87171',
+              fontSize: '0.82rem',
+              marginBottom: '1.5rem',
+              textAlign: 'left',
+              lineHeight: 1.4
+            }}>
+              ⚠️ <strong>Warning:</strong> This user will be permanently removed. All <strong>{deletingUser.submissionsCount}</strong> exam submissions, score records, and result sheets belonging to this user will be deleted immediately.
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setDeletingUser(null)}
+                disabled={isDeletingUser}
+              >
+                Cancel
+              </button>
+              <button
+                id="confirm-delete-user-btn"
+                type="button"
+                className="btn btn-danger"
+                onClick={handleConfirmDeleteUser}
+                disabled={isDeletingUser}
+              >
+                {isDeletingUser ? 'Deleting…' : '✓ Yes, Delete User'}
               </button>
             </div>
           </div>

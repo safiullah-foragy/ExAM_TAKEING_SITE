@@ -6,7 +6,7 @@ const Exam = require('../models/Exam');
 const Submission = require('../models/Submission');
 const { protect } = require('../middleware/auth');
 const { generateResultPDF } = require('../utils/pdfGenerator');
-const { sendResultEmail } = require('../utils/mailer');
+const { sendResultEmail, sendAdminResultNotificationEmail } = require('../utils/mailer');
 const { deleteFromSupabase } = require('../utils/supabaseStorage');
 const { existsInGridFS, getGridFSDownloadStream } = require('../utils/gridfsStorage');
 
@@ -22,13 +22,22 @@ router.get('/', protect, async (req, res) => {
     const userSubmissions = await Submission.find({ userId: req.user._id });
     const submissionMap = {};
     userSubmissions.forEach((sub) => {
+      const score = sub.firstScore !== undefined ? sub.firstScore : sub.score;
+      const passed = sub.firstPassed !== undefined ? sub.firstPassed : sub.passed;
+      const correct = sub.firstCorrect !== undefined ? sub.firstCorrect : sub.correct;
+      const wrong = sub.firstWrong !== undefined ? sub.firstWrong : sub.wrong;
+      const skipped = sub.firstSkipped !== undefined ? sub.firstSkipped : sub.skipped;
+      const submittedAt = sub.firstSubmittedAt || sub.submittedAt;
+
       submissionMap[sub.examId.toString()] = {
-        score: sub.score,
-        passed: sub.passed,
-        correct: sub.correct,
-        wrong: sub.wrong,
-        skipped: sub.skipped,
-        submittedAt: sub.submittedAt,
+        score,
+        passed,
+        correct,
+        wrong,
+        skipped,
+        submittedAt,
+        retakeCount: sub.retakeCount || 0,
+        lastPracticeScore: sub.lastPracticeScore,
       };
     });
 
@@ -81,6 +90,81 @@ router.get('/:id', protect, async (req, res) => {
             submittedAt: submission.submittedAt,
           }
         : null,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ─── GET /api/exam/:id/review ─────────────────────────────────────────────────
+// Get question PDF URL, user's given answers, and correct answers
+router.get('/:id/review', protect, async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.id);
+    if (!exam || (!exam.isActive && !req.admin)) {
+      return res.status(404).json({ message: 'Exam not found or not active' });
+    }
+
+    // Check if user has participated in this exam
+    const submission = await Submission.findOne({
+      userId: req.user._id,
+      examId: exam._id,
+    });
+
+    if (!submission) {
+      return res.status(403).json({
+        message: 'Please participate in the exam first to view answers and solutions.',
+      });
+    }
+
+    // Build PDF URL (Direct Supabase Cloud URL or streaming endpoint)
+    let pdfUrl = exam.pdfPath;
+    if (!pdfUrl || !pdfUrl.startsWith('http')) {
+      pdfUrl = `/api/exam/${exam._id}/pdf`;
+    }
+
+    // Main evaluation is ALWAYS the 1st exam attempt
+    const firstAnswers = (submission.firstAnswers && submission.firstAnswers.length > 0)
+      ? submission.firstAnswers
+      : submission.answers;
+    const firstScore = submission.firstScore !== undefined ? submission.firstScore : submission.score;
+    const firstCorrect = submission.firstCorrect !== undefined ? submission.firstCorrect : submission.correct;
+    const firstWrong = submission.firstWrong !== undefined ? submission.firstWrong : submission.wrong;
+    const firstSkipped = submission.firstSkipped !== undefined ? submission.firstSkipped : submission.skipped;
+    const firstPassed = submission.firstPassed !== undefined ? submission.firstPassed : submission.passed;
+    const firstSubmittedAt = submission.firstSubmittedAt || submission.submittedAt;
+    const firstTimeTaken = submission.firstTimeTaken !== undefined ? submission.firstTimeTaken : submission.timeTaken;
+
+    res.json({
+      exam: {
+        _id: exam._id,
+        title: exam.title,
+        author: exam.author,
+        totalTime: exam.totalTime,
+        totalMarks: exam.totalMarks,
+        passMarks: exam.passMarks,
+        marksPerMCQ: exam.marksPerMCQ,
+        negativeMark: exam.negativeMark,
+        totalQuestions: exam.totalQuestions,
+        pdfUrl,
+        answerKey: exam.answerKey,
+      },
+      submission: {
+        _id: submission._id,
+        score: firstScore,
+        totalAttempted: firstCorrect + firstWrong,
+        correct: firstCorrect,
+        wrong: firstWrong,
+        skipped: firstSkipped,
+        passed: firstPassed,
+        timeTaken: firstTimeTaken,
+        submittedAt: firstSubmittedAt,
+        answers: firstAnswers,
+        resultPdfPath: submission.resultPdfPath,
+        retakeCount: submission.retakeCount || 0,
+        lastPracticeScore: submission.lastPracticeScore,
+        isFirstAttemptRecord: true,
+      },
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -197,25 +281,28 @@ router.post('/:id/submit', protect, async (req, res) => {
     const isRetake = !!submission;
 
     if (submission) {
-      // Remove old result PDF from Supabase Storage or local disk
-      if (submission.resultPdfPath) {
-        if (submission.resultPdfPath.startsWith('http')) {
-          await deleteFromSupabase(submission.resultPdfPath);
-        } else if (fs.existsSync(submission.resultPdfPath)) {
-          try { fs.unlinkSync(submission.resultPdfPath); } catch {}
-        }
+      // ── Retake is strictly for practice! Main evaluation is the FIRST exam ──
+      // Ensure the first exam snapshot is preserved
+      if (!submission.firstAnswers || submission.firstAnswers.length === 0) {
+        submission.firstAnswers = submission.answers;
+        submission.firstScore = submission.score;
+        submission.firstCorrect = submission.correct;
+        submission.firstWrong = submission.wrong;
+        submission.firstSkipped = submission.skipped;
+        submission.firstPassed = submission.passed;
+        submission.firstSubmittedAt = submission.submittedAt;
+        submission.firstTimeTaken = submission.timeTaken;
       }
 
-      submission.answers = evaluatedAnswers;
-      submission.score = score;
-      submission.totalAttempted = correct + wrong;
-      submission.correct = correct;
-      submission.wrong = wrong;
-      submission.skipped = skipped;
-      submission.passed = passed;
-      submission.timeTaken = timeTaken || 0;
-      submission.submittedAt = new Date();
+      // Record practice retake details without altering the official first exam evaluation
+      submission.retakeCount = (submission.retakeCount || 0) + 1;
+      submission.lastPracticeScore = score;
+      submission.lastPracticeAnswers = evaluatedAnswers;
+      submission.lastPracticeSubmittedAt = new Date();
+
+      // Official evaluation (answers, score, passed, etc.) stays as the FIRST exam
     } else {
+      // ── First attempt: this is the main official evaluation ──
       submission = new Submission({
         userId: req.user._id,
         examId: exam._id,
@@ -227,47 +314,82 @@ router.post('/:id/submit', protect, async (req, res) => {
         skipped,
         passed,
         timeTaken: timeTaken || 0,
+        submittedAt: new Date(),
+
+        firstAnswers: evaluatedAnswers,
+        firstScore: score,
+        firstCorrect: correct,
+        firstWrong: wrong,
+        firstSkipped: skipped,
+        firstPassed: passed,
+        firstSubmittedAt: new Date(),
+        firstTimeTaken: timeTaken || 0,
+        retakeCount: 0,
       });
     }
 
     await submission.save();
 
-    // Generate updated result PDF (and upload to Supabase Storage)
-    const resultsDir = path.join(__dirname, '../uploads/results');
-    if (!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true });
-
-    let pdfResult = null;
+    // Generate official result PDF on first attempt
     let localPdfPathForEmail = null;
+    if (!isRetake || !submission.resultPdfPath) {
+      const resultsDir = path.join(__dirname, '../uploads/results');
+      if (!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true });
 
-    try {
-      pdfResult = await generateResultPDF({
-        user: req.user,
-        exam,
-        submission,
-        outputDir: resultsDir,
-      });
+      try {
+        const pdfResult = await generateResultPDF({
+          user: req.user,
+          exam,
+          submission,
+          outputDir: resultsDir,
+        });
 
-      localPdfPathForEmail = pdfResult.localPath;
-      submission.resultPdfPath = pdfResult.publicUrl || pdfResult.localPath;
-      await submission.save();
-    } catch (pdfErr) {
-      console.error('PDF generation error:', pdfErr.message);
+        localPdfPathForEmail = pdfResult.localPath;
+        submission.resultPdfPath = pdfResult.publicUrl || pdfResult.localPath;
+        await submission.save();
+      } catch (pdfErr) {
+        console.error('PDF generation error:', pdfErr.message);
+      }
     }
 
-    // Send updated result email (non-blocking)
+    // Send result email to student (non-blocking)
     sendResultEmail(
       req.user.email,
       req.user.name,
-      `${exam.title}${isRetake ? ' (Updated Result)' : ''}`,
+      `${exam.title}${isRetake ? ' (Practice Retake Result)' : ''}`,
       score,
       exam.totalMarks,
       passed,
       localPdfPathForEmail
-    ).catch((err) => console.error('Email send error:', err.message));
+    ).catch((err) => console.error('Student email send error:', err.message));
+
+    // If user participated for the first time, send student's answer result to admin's email as well
+    if (!isRetake) {
+      const adminEmail = process.env.ADMIN_EMAIL || process.env.MAIL_USER || 'safiullahforagy1@gmail.com';
+      if (adminEmail) {
+        sendAdminResultNotificationEmail({
+          adminEmail,
+          studentName: req.user.name,
+          studentEmail: req.user.email,
+          examTitle: exam.title,
+          score,
+          totalMarks: exam.totalMarks,
+          passed,
+          correct,
+          wrong,
+          skipped,
+          timeTaken,
+          pdfPath: localPdfPathForEmail,
+        }).catch((err) => console.error('Admin result notification email error:', err.message));
+      }
+    }
 
     res.status(200).json({
-      message: isRetake ? 'Exam re-submitted and score updated!' : 'Exam submitted successfully',
+      message: isRetake
+        ? 'Practice retake submitted! Your official evaluation remains from your 1st exam attempt.'
+        : 'Exam submitted successfully',
       isRetake,
+      officialScore: submission.firstScore !== undefined ? submission.firstScore : submission.score,
       result: {
         score,
         totalMarks: exam.totalMarks,

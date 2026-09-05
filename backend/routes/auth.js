@@ -81,6 +81,11 @@ router.post('/login', async (req, res) => {
     if (!user.isVerified) {
       return res.status(401).json({ message: 'Email not verified. Please sign up again.' });
     }
+    if (user.isActive === false) {
+      return res.status(403).json({
+        message: 'Your account has been deactivated. Please contact administrator.',
+      });
+    }
 
     // Compare password
     const isMatch = await bcrypt.compare(password, user.password);

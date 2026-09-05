@@ -22,6 +22,7 @@ const protect = async (req, res, next) => {
 
     if (decoded.role === 'admin') {
       req.admin = true;
+      req.adminEmail = decoded.email;
       return next();
     }
 
@@ -31,6 +32,11 @@ const protect = async (req, res, next) => {
     }
     if (!user.isVerified) {
       return res.status(401).json({ message: 'Account not verified' });
+    }
+    if (user.isActive === false) {
+      return res.status(403).json({
+        message: 'Your account has been deactivated. Please contact the administrator.',
+      });
     }
 
     req.user = user;
@@ -59,6 +65,7 @@ const adminOnly = async (req, res, next) => {
       return res.status(403).json({ message: 'Forbidden: Admin only' });
     }
     req.admin = true;
+    req.adminEmail = decoded.email;
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Invalid admin token' });

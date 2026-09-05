@@ -87,8 +87,19 @@ export default function ExamPage() {
       });
       // Clear cache
       localStorage.removeItem(CACHE_KEY(id));
-      toast.success('Exam submitted! Check your email for results 📧');
-      navigate(`/result/${id}`, { state: { result: res.data.result, examTitle: exam.title } });
+      toast.success(
+        res.data.isRetake
+          ? 'Practice retake submitted! Your official evaluation remains from your 1st exam attempt.'
+          : 'Exam submitted! Check your email for results 📧'
+      );
+      navigate(`/result/${id}`, {
+        state: {
+          result: res.data.result,
+          examTitle: exam.title,
+          isRetake: res.data.isRetake,
+          officialScore: res.data.officialScore,
+        },
+      });
     } catch (err) {
       hasSubmitted.current = false;
       toast.error(err.response?.data?.message || 'Submission failed');

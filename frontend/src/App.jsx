@@ -11,6 +11,8 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboard from './pages/AdminDashboard';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import ExamReviewPage from './pages/ExamReviewPage';
+import MessagesPage from './pages/MessagesPage';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -22,6 +24,14 @@ const ProtectedRoute = ({ children }) => {
 const AdminRoute = ({ children }) => {
   const adminToken = localStorage.getItem('adminToken');
   if (!adminToken) return <Navigate to="/admin/login" replace />;
+  return children;
+};
+
+const AuthenticatedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  const adminToken = localStorage.getItem('adminToken');
+  if (loading) return <div className="loader-wrap"><div className="spinner" /></div>;
+  if (!user && !adminToken) return <Navigate to="/login" replace />;
   return children;
 };
 
@@ -43,7 +53,9 @@ function AppRoutes() {
       <Route path="/reset-otp" element={<ResetPasswordPage />} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/exam/:id" element={<ProtectedRoute><ExamPage /></ProtectedRoute>} />
+      <Route path="/exam/:id/review" element={<ProtectedRoute><ExamReviewPage /></ProtectedRoute>} />
       <Route path="/result/:id" element={<ProtectedRoute><ResultPage /></ProtectedRoute>} />
+      <Route path="/messages" element={<AuthenticatedRoute><MessagesPage /></AuthenticatedRoute>} />
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       <Route path="*" element={<Navigate to="/login" replace />} />

@@ -342,11 +342,106 @@ const sendBroadcastEmail = async ({ to, name, subject, message, attachment = nul
   });
 };
 
+/**
+ * Send admin a detailed notification email when a user participates in an exam for the first time
+ */
+const sendAdminResultNotificationEmail = async ({
+  adminEmail,
+  studentName,
+  studentEmail,
+  examTitle,
+  score,
+  totalMarks,
+  passed,
+  correct,
+  wrong,
+  skipped,
+  timeTaken,
+  pdfPath,
+}) => {
+  const formattedTime = timeTaken
+    ? `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`
+    : 'N/A';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <body style="margin:0;padding:0;background:#0f0f1a;font-family:'Segoe UI',sans-serif;">
+        <div style="max-width:540px;margin:40px auto;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;overflow:hidden;border:1px solid rgba(99,102,241,0.3);">
+          <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:28px 32px;text-align:center;">
+            <h1 style="color:#fff;margin:0;font-size:24px;">📋 Student Exam Submission</h1>
+            <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;">First-Time Exam Attendance</p>
+          </div>
+          <div style="padding:32px;">
+            <p style="color:#94a3b8;margin:0 0 20px;font-size:15px;">
+              A student has completed and submitted an exam on ExamSite for the first time:
+            </p>
+
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:20px;">
+              <table style="width:100%;color:#cbd5e1;font-size:14px;border-collapse:collapse;">
+                <tr>
+                  <td style="padding:6px 0;color:#94a3b8;">👤 <strong>Student:</strong></td>
+                  <td style="padding:6px 0;color:#f8fafc;font-weight:600;text-align:right;">${studentName}</td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 0;color:#94a3b8;">📧 <strong>Email:</strong></td>
+                  <td style="padding:6px 0;color:#818cf8;text-align:right;">${studentEmail}</td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 0;color:#94a3b8;">📝 <strong>Exam:</strong></td>
+                  <td style="padding:6px 0;color:#f8fafc;font-weight:600;text-align:right;">${examTitle}</td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 0;color:#94a3b8;">⏱ <strong>Time Taken:</strong></td>
+                  <td style="padding:6px 0;color:#cbd5e1;text-align:right;">${formattedTime}</td>
+                </tr>
+              </table>
+            </div>
+
+            <div style="background:rgba(99,102,241,0.1);border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">
+              <div style="font-size:44px;font-weight:800;color:${passed ? '#10b981' : '#ef4444'};">${score}</div>
+              <div style="color:#64748b;font-size:13px;">out of ${totalMarks} marks</div>
+              <div style="margin-top:10px;display:inline-block;padding:4px 16px;border-radius:999px;background:${passed ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'};color:${passed ? '#10b981' : '#ef4444'};font-weight:700;font-size:14px;">
+                ${passed ? 'PASSED ✓' : 'FAILED ✗'}
+              </div>
+              <div style="display:flex;justify-content:center;gap:16px;margin-top:16px;font-size:13px;">
+                <span style="color:#10b981;">✓ ${correct} Correct</span>
+                <span style="color:#ef4444;">✗ ${wrong} Wrong</span>
+                <span style="color:#94a3b8;">— ${skipped} Skipped</span>
+              </div>
+            </div>
+
+            <p style="color:#94a3b8;font-size:13px;line-height:1.5;margin:0;">
+              📎 The student's full result sheet PDF (with questions, candidate photo, user's answers, and correct answers) is attached to this email.
+            </p>
+          </div>
+          <div style="background:rgba(0,0,0,0.3);padding:16px 32px;text-align:center;">
+            <p style="color:#475569;font-size:12px;margin:0;">© 2026 ExamSite Admin Notification</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const attachments = (pdfPath && fs.existsSync(pdfPath))
+    ? [{ filename: `${studentName.replace(/\s+/g, '_')}_${examTitle.replace(/\s+/g, '_')}_Result.pdf`, path: pdfPath }]
+    : [];
+
+  return await sendMailGeneric({
+    to: adminEmail,
+    name: 'ExamSite Admin',
+    subject: `📋 First-Time Exam Submission: ${studentName} — ${examTitle} (${score}/${totalMarks})`,
+    html,
+    attachments,
+  });
+};
+
 module.exports = {
   sendOTPEmail,
   sendResultEmail,
   sendNewExamNotificationEmail,
   sendBroadcastEmail,
+  sendAdminResultNotificationEmail,
 };
 
 

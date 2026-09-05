@@ -5,6 +5,8 @@ export default function ResultPage() {
   const navigate = useNavigate();
   const result = state?.result;
   const examTitle = state?.examTitle || 'Exam';
+  const isRetake = !!state?.isRetake;
+  const officialScore = state?.officialScore;
 
   if (!result) {
     navigate('/profile');
@@ -34,9 +36,26 @@ export default function ResultPage() {
             {result.passed ? '🎉' : '📚'}
           </div>
           <h1 style={{fontSize:'1.6rem', marginBottom:'0.25rem', color: passColor}}>
-            {result.passed ? 'Congratulations!' : 'Keep Practicing!'}
+            {isRetake
+              ? (result.passed ? 'Great Practice!' : 'Keep Practicing!')
+              : (result.passed ? 'Congratulations!' : 'Keep Practicing!')}
           </h1>
           <p style={{color:'var(--text-muted)', fontSize:'0.9rem'}}>{examTitle}</p>
+          {isRetake && (
+            <div style={{
+              display: 'inline-block',
+              marginTop: '0.5rem',
+              background: 'rgba(99,102,241,0.15)',
+              border: '1px solid rgba(99,102,241,0.3)',
+              color: 'var(--primary-light)',
+              padding: '0.2rem 0.75rem',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '0.75rem',
+              fontWeight: 700
+            }}>
+              🔄 Practice Retake Mode
+            </div>
+          )}
         </div>
 
         {/* Score Ring */}
@@ -96,16 +115,45 @@ export default function ResultPage() {
           </div>
         </div>
 
-        <p style={{fontSize:'0.85rem', color:'var(--text-muted)', margin:'1rem 0 1.5rem',
-          background:'rgba(99,102,241,0.08)', padding:'0.75rem 1rem', borderRadius:'var(--radius-md)',
-          border:'1px solid var(--border)'}}>
-          📧 Your detailed result sheet has been sent to your email as a PDF attachment.
-        </p>
+        {isRetake ? (
+          <div style={{
+            fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '1rem 0 1.5rem',
+            background: 'rgba(245,158,11,0.08)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)',
+            border: '1px solid rgba(245,158,11,0.25)', textAlign: 'left'
+          }}>
+            <div style={{ fontWeight: 700, color: 'var(--accent-amber)', marginBottom: '0.25rem' }}>
+              💡 Practice Attempt Notice
+            </div>
+            <div>
+              This was a practice retake. Your official evaluation on record remains from your <strong>1st exam attempt</strong>
+              {officialScore !== undefined ? ` (${officialScore}/${result.totalMarks})` : ''}.
+              The answer record will always show your 1st exam's given answers.
+            </div>
+          </div>
+        ) : (
+          <p style={{fontSize:'0.85rem', color:'var(--text-muted)', margin:'1rem 0 1.5rem',
+            background:'rgba(99,102,241,0.08)', padding:'0.75rem 1rem', borderRadius:'var(--radius-md)',
+            border:'1px solid var(--border)'}}>
+            📧 Your detailed result sheet has been sent to your email as a PDF attachment.
+          </p>
+        )}
 
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            id="view-answers-result-btn"
+            className="btn btn-secondary btn-full"
+            style={{ flex: '1 1 100%', marginBottom: '0.25rem' }}
+            onClick={() => {
+              const examId = window.location.pathname.split('/').pop();
+              navigate(`/exam/${examId}/review`);
+            }}
+          >
+            👁 See Answers & Solutions
+          </button>
           <button
             id="back-to-profile-btn"
             className="btn btn-outline btn-full"
+            style={{ flex: 1 }}
             onClick={() => navigate('/profile')}
           >
             ← Back to Profile
@@ -113,6 +161,7 @@ export default function ResultPage() {
           <button
             id="retake-exam-btn"
             className="btn btn-primary btn-full"
+            style={{ flex: 1 }}
             onClick={() => {
               // Clear cached answers for this exam before retake
               const examId = window.location.pathname.split('/').pop();

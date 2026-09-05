@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 const Exam = require('../models/Exam');
 const Submission = require('../models/Submission');
 const { adminOnly } = require('../middleware/auth');
@@ -600,5 +601,218 @@ router.post(
   }
 );
 
+// ─── GET /api/admin/users ─────────────────────────────────────────────────────
+// List all users with submission counts and summary stats
+router.get('/users', adminOnly, async (req, res) => {
+  try {
+    const users = await User.find()
+      .select('-password -otp -otpExpiry')
+      .sort({ createdAt: -1 });
+
+    // Count submissions per user
+    const userSubmissionCounts = await Submission.aggregate([
+      { $group: { _id: '$userId', count: { $sum: 1 } } },
+    ]);
+    const submissionCountMap = {};
+    userSubmissionCounts.forEach((s) => {
+      if (s._id) submissionCountMap[s._id.toString()] = s.count;
+    });
+
+    const enrichedUsers = users.map((u) => ({
+      _id: u._id,
+      name: u.name,
+      email: u.email,
+      photo: u.photo,
+      isVerified: !!u.isVerified,
+      isActive: u.isActive !== false,
+      submissionsCount: submissionCountMap[u._id.toString()] || 0,
+      createdAt: u.createdAt,
+    }));
+
+    const totalUsers = enrichedUsers.length;
+    const activeUsers = enrichedUsers.filter((u) => u.isActive).length;
+    const deactivatedUsers = totalUsers - activeUsers;
+    const verifiedUsers = enrichedUsers.filter((u) => u.isVerified).length;
+
+    res.json({
+      users: enrichedUsers,
+      stats: {
+        totalUsers,
+        activeUsers,
+        deactivatedUsers,
+        verifiedUsers,
+      },
+    });
+  } catch (error) {
+    console.error('Admin get users error:', error);
+    res.status(500).json({ message: 'Failed to fetch users', error: error.message });
+  }
+});
+
+// ─── PUT /api/admin/user/:id/toggle-status ─────────────────────────────────────
+// Toggle user active / deactivated state
+router.put('/user/:id/toggle-status', adminOnly, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Toggle active state
+    user.isActive = user.isActive === false ? true : false;
+    await user.save();
+
+    res.json({
+      message: `User account ${user.isActive ? 'activated' : 'deactivated'} successfully`,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isActive: user.isActive,
+      },
+    });
+  } catch (error) {
+    console.error('Admin toggle user status error:', error);
+    res.status(500).json({ message: 'Failed to update user status', error: error.message });
+  }
+});
+
+// ─── DELETE /api/admin/user/:id ───────────────────────────────────────────────
+// Permanently delete user and clean up all associated submissions and files
+router.delete('/user/:id', adminOnly, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // 1. Find all user's submissions
+    const submissions = await Submission.find({ userId: user._id });
+
+    // 2. Delete result PDFs from Supabase or disk
+    for (const sub of submissions) {
+      if (sub.resultPdfPath) {
+        if (sub.resultPdfPath.startsWith('http')) {
+          await deleteFromSupabase(sub.resultPdfPath).catch(() => {});
+        } else if (fs.existsSync(sub.resultPdfPath)) {
+          try { fs.unlinkSync(sub.resultPdfPath); } catch {}
+        }
+      }
+    }
+
+    // 3. Remove all submissions for this user
+    await Submission.deleteMany({ userId: user._id });
+
+    // 4. Delete user photo from Supabase if uploaded
+    if (user.photo && user.photo.startsWith('http')) {
+      await deleteFromSupabase(user.photo).catch(() => {});
+    }
+
+    // 5. Delete user document
+    await User.findByIdAndDelete(user._id);
+
+    res.json({
+      message: `User "${user.name}" (${user.email}) and all associated records deleted permanently.`,
+      deletedUserId: user._id,
+    });
+  } catch (error) {
+    console.error('Admin delete user error:', error);
+    res.status(500).json({ message: 'Failed to delete user', error: error.message });
+  }
+});
+
+// ─── Admin Profile & Photo Storage ────────────────────────────────────────────
+const adminPhotoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '../uploads/photos');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `admin_photo_${Date.now()}${ext}`);
+  },
+});
+
+const adminPhotoUpload = multer({
+  storage: adminPhotoStorage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) return cb(null, true);
+    cb(new Error('Only image files are allowed'), false);
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+});
+
+// ─── GET /api/admin/profile ───────────────────────────────────────────────────
+router.get('/profile', adminOnly, async (req, res) => {
+  try {
+    const email = req.adminEmail || process.env.ADMIN_EMAIL;
+    let admin = await Admin.findOne({ email: email.toLowerCase() });
+    if (!admin) {
+      admin = await Admin.create({
+        email: email.toLowerCase(),
+        name: 'Exam Authority',
+        title: 'Head Administrator',
+      });
+    }
+    res.json({ admin });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch admin profile', error: error.message });
+  }
+});
+
+// ─── PUT /api/admin/profile ───────────────────────────────────────────────────
+router.put('/profile', adminOnly, async (req, res) => {
+  try {
+    const email = req.adminEmail || process.env.ADMIN_EMAIL;
+    const { name, title } = req.body;
+    let admin = await Admin.findOne({ email: email.toLowerCase() });
+    if (!admin) {
+      admin = new Admin({ email: email.toLowerCase() });
+    }
+    if (name !== undefined) admin.name = name.trim();
+    if (title !== undefined) admin.title = title.trim();
+    await admin.save();
+    res.json({ message: 'Admin profile updated successfully', admin });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update admin profile', error: error.message });
+  }
+});
+
+// ─── PUT /api/admin/photo ─────────────────────────────────────────────────────
+router.put('/photo', adminOnly, adminPhotoUpload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No photo file provided' });
+    }
+    const email = req.adminEmail || process.env.ADMIN_EMAIL;
+    let admin = await Admin.findOne({ email: email.toLowerCase() });
+    if (!admin) {
+      admin = new Admin({ email: email.toLowerCase() });
+    }
+
+    if (admin.photo && admin.photo.startsWith('http')) {
+      await deleteFromSupabase(admin.photo).catch(() => {});
+    }
+
+    const ext = path.extname(req.file.originalname);
+    const destPath = `photos/admin_${Date.now()}${ext}`;
+    const publicUrl = await uploadToSupabase(req.file.path, destPath, req.file.mimetype);
+
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    admin.photo = publicUrl;
+    await admin.save();
+
+    res.json({ message: 'Admin photo updated successfully', photo: publicUrl, admin });
+  } catch (error) {
+    console.error('Admin photo upload error:', error);
+    res.status(500).json({ message: 'Failed to upload admin photo', error: error.message });
+  }
+});
+
 module.exports = router;
+
 
