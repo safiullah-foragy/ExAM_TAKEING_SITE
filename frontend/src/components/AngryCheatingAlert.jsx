@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 export default function AngryCheatingAlert({
-  duration = 3,
+  duration,
   message,
   userName,
   onComplete,
@@ -14,6 +14,10 @@ export default function AngryCheatingAlert({
       if (stored?.name) resolvedUserName = stored.name;
     } catch {}
   }
+
+  // Resolve duration: prop -> VITE_CHEATING_WARNING_DURATION -> default 3s
+  const rawDuration = duration ?? import.meta.env.VITE_CHEATING_WARNING_DURATION;
+  const alertDuration = Math.max(1, parseInt(rawDuration, 10) || 3);
 
   const rawMessage =
     message ||
@@ -30,10 +34,12 @@ export default function AngryCheatingAlert({
     displayMessage = `${resolvedUserName}, চিটিং করার চেষ্টা করিস না!`;
   }
 
-  const [secondsRemaining, setSecondsRemaining] = useState(duration);
+  const [secondsRemaining, setSecondsRemaining] = useState(alertDuration);
   const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
+    setSecondsRemaining(alertDuration);
+
     // Tick countdown every second
     const interval = setInterval(() => {
       setSecondsRemaining((prev) => {
@@ -51,13 +57,13 @@ export default function AngryCheatingAlert({
       setTimeout(() => {
         if (onComplete) onComplete();
       }, 350); // wait for exit fade-out
-    }, duration * 1000);
+    }, alertDuration * 1000);
 
     return () => {
       clearInterval(interval);
       clearTimeout(timer);
     };
-  }, [duration, onComplete]);
+  }, [alertDuration, onComplete]);
 
   return (
     <div
@@ -84,7 +90,7 @@ export default function AngryCheatingAlert({
             <div className="progress-track">
               <div
                 className="progress-fill"
-                style={{ animationDuration: `${duration}s` }}
+                style={{ animationDuration: `${alertDuration}s` }}
               />
             </div>
           </div>

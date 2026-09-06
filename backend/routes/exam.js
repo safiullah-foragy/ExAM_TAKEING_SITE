@@ -79,6 +79,9 @@ router.get('/:id', protect, async (req, res) => {
         ...exam.toObject(),
         pdfUrl,
         cheatingWarningMessage: process.env.CHEATING_WARNING_MESSAGE || '',
+        cheatingWarningDuration: process.env.CHEATING_WARNING_DURATION
+          ? parseInt(process.env.CHEATING_WARNING_DURATION, 10) || 3
+          : undefined,
       },
       alreadySubmitted: !!submission,
       submission: submission

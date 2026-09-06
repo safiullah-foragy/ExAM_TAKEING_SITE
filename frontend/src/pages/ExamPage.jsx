@@ -258,10 +258,10 @@ export default function ExamPage() {
         </div>
       )}
 
-      {/* Walking Angry Emoji Cheating Warning Alert (3s delay before exam timer) */}
+      {/* Walking Angry Emoji Cheating Warning Alert */}
       {showCheatingWarning && (
         <AngryCheatingAlert
-          duration={3}
+          duration={exam?.cheatingWarningDuration}
           message={exam?.cheatingWarningMessage}
           userName={user?.name}
           onComplete={handleWarningComplete}
