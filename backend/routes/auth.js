@@ -97,7 +97,7 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(
       { id: user._id, email: user.email, role: 'user' },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE || '7d' }
+      { expiresIn: process.env.JWT_EXPIRE || '3650d' }
     );
 
     res.status(200).json({
@@ -148,7 +148,7 @@ router.post('/verify-otp', async (req, res) => {
     const token = jwt.sign(
       { id: user._id, email: user.email, role: 'user' },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE || '7d' }
+      { expiresIn: process.env.JWT_EXPIRE || '3650d' }
     );
 
     res.status(200).json({

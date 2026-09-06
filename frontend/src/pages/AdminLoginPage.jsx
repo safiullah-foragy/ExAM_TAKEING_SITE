@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import api from '../utils/api';
@@ -10,6 +10,12 @@ export default function AdminLoginPage() {
   const navigate = useNavigate();
   const toast = useToast();
 
+  useEffect(() => {
+    if (localStorage.getItem('adminToken')) {
+      navigate('/admin', { replace: true });
+    }
+  }, [navigate]);
+
   const handleChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleSubmit = async (e) => {
@@ -17,8 +23,6 @@ export default function AdminLoginPage() {
     setLoading(true);
     try {
       const res = await api.post('/admin/login', form);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
       localStorage.setItem('adminToken', res.data.token);
       toast.success('Welcome, Admin! 🛡️');
       navigate('/admin');

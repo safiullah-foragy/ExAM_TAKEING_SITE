@@ -5,51 +5,49 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export default function PresenceTracker() {
   useEffect(() => {
-    const getToken = () => localStorage.getItem('adminToken') || localStorage.getItem('token');
+    const getActiveTokens = () => {
+      const tokens = [];
+      const adminToken = localStorage.getItem('adminToken');
+      const userToken = localStorage.getItem('token');
+      if (adminToken) tokens.push(adminToken);
+      if (userToken) tokens.push(userToken);
+      return tokens;
+    };
 
     const sendHeartbeat = async () => {
-      const token = getToken();
-      if (!token) return;
-      try {
-        await axios.post(
-          `${BASE_URL}/api/chat/heartbeat`,
-          {},
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      } catch {
-        // silent fail on network glitch
-      }
+      const tokens = getActiveTokens();
+      tokens.forEach((t) => {
+        axios
+          .post(`${BASE_URL}/api/chat/heartbeat`, {}, { headers: { Authorization: `Bearer ${t}` } })
+          .catch(() => {});
+      });
     };
 
     const sendOffline = () => {
-      const token = getToken();
-      if (!token) return;
-      const url = `${BASE_URL}/api/chat/offline`;
-
-      // Modern fetch with keepalive ensures the request outlives the page unload
-      if (typeof fetch !== 'undefined') {
-        try {
-          fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ token }),
-            keepalive: true,
-          }).catch(() => {});
-          return;
-        } catch {
-          // fallback to sendBeacon below
+      const tokens = getActiveTokens();
+      tokens.forEach((t) => {
+        const url = `${BASE_URL}/api/chat/offline`;
+        if (typeof fetch !== 'undefined') {
+          try {
+            fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${t}`,
+              },
+              body: JSON.stringify({ token: t }),
+              keepalive: true,
+            }).catch(() => {});
+            return;
+          } catch {}
         }
-      }
-
-      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-        try {
-          const blob = new Blob([JSON.stringify({ token })], { type: 'application/json' });
-          navigator.sendBeacon(url, blob);
-        } catch {}
-      }
+        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+          try {
+            const blob = new Blob([JSON.stringify({ token: t })], { type: 'application/json' });
+            navigator.sendBeacon(url, blob);
+          } catch {}
+        }
+      });
     };
 
     // 1. Send immediate heartbeat as soon as user opens the site

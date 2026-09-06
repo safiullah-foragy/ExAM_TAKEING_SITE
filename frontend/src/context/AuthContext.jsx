@@ -18,7 +18,6 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = (tokenVal, userData) => {
-    localStorage.removeItem('adminToken');
     localStorage.setItem('token', tokenVal);
     localStorage.setItem('user', JSON.stringify(userData));
     setToken(tokenVal);
@@ -41,7 +40,6 @@ export const AuthProvider = ({ children }) => {
     }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    localStorage.removeItem('adminToken');
     setToken(null);
     setUser(null);
   };

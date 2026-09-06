@@ -535,7 +535,7 @@ export default function AdminDashboard() {
             <button
               id="admin-messages-nav-btn"
               className="btn btn-outline btn-sm nav-chat-btn"
-              onClick={() => navigate('/messages')}
+              onClick={() => navigate('/messages?as=admin')}
               title="Open Messenger"
             >
               💬 Messages
@@ -576,7 +576,7 @@ export default function AdminDashboard() {
             <div
               id="tab-messages"
               className={`admin-tab${tab === 'messages' ? ' active' : ''}`}
-              onClick={() => navigate('/messages')}
+              onClick={() => navigate('/messages?as=admin')}
               style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}
             >
               💬 Messages

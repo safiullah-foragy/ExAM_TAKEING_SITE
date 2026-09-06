@@ -7,23 +7,37 @@ import { useToast } from '../context/ToastContext';
 
 const BASE_URL = API_ORIGIN || 'http://localhost:5000';
 
-const getChatClient = () => {
-  const client = axios.create({ baseURL: API_BASE });
-  const adminToken = localStorage.getItem('adminToken');
-  const userToken = localStorage.getItem('token');
-  const token = adminToken || userToken;
-  if (token) {
-    client.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  }
-  return client;
-};
-
 export default function MessagesPage() {
   const { user, logout } = useAuth();
-  const isAdmin = Boolean(localStorage.getItem('adminToken'));
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const targetPartnerParam = searchParams.get('to');
+  const asParam = searchParams.get('as');
+  const toast = useToast();
+
+  const adminToken = localStorage.getItem('adminToken');
+  const userToken = localStorage.getItem('token');
+
+  // Determine whether this chat session is acting as Admin or Student
+  const isAdmin =
+    asParam === 'admin'
+      ? true
+      : asParam === 'user' || asParam === 'student' || targetPartnerParam === 'admin'
+      ? false
+      : Boolean(adminToken && !userToken);
+
+  const activeToken = isAdmin ? adminToken : (userToken || adminToken);
+
+  const getChatClient = () => {
+    const client = axios.create({ baseURL: API_BASE });
+    if (activeToken) {
+      client.defaults.headers.common['Authorization'] = `Bearer ${activeToken}`;
+    }
+    return client;
+  };
 
   const getCurrentUserId = () => {
-    if (localStorage.getItem('adminToken')) return 'admin';
+    if (isAdmin) return 'admin';
     if (user?._id) return String(user._id);
     if (user?.id) return String(user.id);
     const savedUser = localStorage.getItem('user');
@@ -33,7 +47,7 @@ export default function MessagesPage() {
         if (parsed._id || parsed.id) return String(parsed._id || parsed.id);
       } catch {}
     }
-    const token = localStorage.getItem('token');
+    const token = userToken || localStorage.getItem('token');
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
@@ -43,11 +57,6 @@ export default function MessagesPage() {
     return null;
   };
   const currentUserId = getCurrentUserId();
-
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const targetPartnerParam = searchParams.get('to');
-  const toast = useToast();
 
   const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'contacts'
   const [searchQuery, setSearchQuery] = useState('');
