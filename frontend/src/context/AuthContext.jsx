@@ -25,6 +25,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    const savedToken = localStorage.getItem('token');
+    if (savedToken) {
+      const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      fetch(`${BASE_URL}/api/chat/offline`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${savedToken}`,
+        },
+        body: JSON.stringify({ token: savedToken }),
+        keepalive: true,
+      }).catch(() => {});
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setToken(null);

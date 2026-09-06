@@ -302,6 +302,19 @@ export default function AdminDashboard() {
   };
 
   const handleLogout = () => {
+    const adminToken = localStorage.getItem('adminToken');
+    if (adminToken) {
+      const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      fetch(`${BASE_URL}/api/chat/offline`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ token: adminToken }),
+        keepalive: true,
+      }).catch(() => {});
+    }
     localStorage.removeItem('adminToken');
     navigate('/admin/login');
   };

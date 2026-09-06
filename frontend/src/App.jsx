@@ -13,6 +13,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ExamReviewPage from './pages/ExamReviewPage';
 import MessagesPage from './pages/MessagesPage';
+import PresenceTracker from './components/PresenceTracker';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -66,6 +67,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
+      <PresenceTracker />
       <ToastProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <div className="page-bg" />

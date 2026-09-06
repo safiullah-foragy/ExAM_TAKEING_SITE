@@ -2,12 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 
 const pad = (n) => String(n).padStart(2, '0');
 
-export default function CountdownTimer({ totalSeconds, onTimeUp }) {
+export default function CountdownTimer({ totalSeconds, onTimeUp, isPaused = false }) {
   const [remaining, setRemaining] = useState(totalSeconds);
   const timerRef = useRef();
   const firedRef = useRef(false);
 
   useEffect(() => {
+    if (isPaused) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      return;
+    }
+
     timerRef.current = setInterval(() => {
       setRemaining((prev) => {
         if (prev <= 1) {
@@ -22,7 +27,7 @@ export default function CountdownTimer({ totalSeconds, onTimeUp }) {
       });
     }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [onTimeUp]);
+  }, [onTimeUp, isPaused]);
 
   const hours = Math.floor(remaining / 3600);
   const minutes = Math.floor((remaining % 3600) / 60);

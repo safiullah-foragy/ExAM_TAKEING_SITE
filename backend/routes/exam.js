@@ -78,6 +78,7 @@ router.get('/:id', protect, async (req, res) => {
       exam: {
         ...exam.toObject(),
         pdfUrl,
+        cheatingWarningMessage: process.env.CHEATING_WARNING_MESSAGE || '',
       },
       alreadySubmitted: !!submission,
       submission: submission

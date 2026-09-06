@@ -23,6 +23,14 @@ const adminSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+    },
+    isOnline: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

@@ -8,6 +8,7 @@ const User = require('../models/User');
 const Admin = require('../models/Admin');
 const Exam = require('../models/Exam');
 const Submission = require('../models/Submission');
+const Message = require('../models/Message');
 const { adminOnly } = require('../middleware/auth');
 const { parseAnswerCSV } = require('../utils/csvParser');
 const { uploadToSupabase, deleteFromSupabase } = require('../utils/supabaseStorage');
@@ -703,16 +704,39 @@ router.delete('/user/:id', adminOnly, async (req, res) => {
     // 3. Remove all submissions for this user
     await Submission.deleteMany({ userId: user._id });
 
-    // 4. Delete user photo from Supabase if uploaded
+    // 4. Delete all chat messages and attachments sent by or sent to this user
+    const userIdStr = user._id.toString();
+    const userMessages = await Message.find({
+      $or: [{ senderId: userIdStr }, { recipientId: userIdStr }],
+    });
+
+    for (const msg of userMessages) {
+      if (msg.mediaUrl) {
+        if (msg.mediaUrl.startsWith('http')) {
+          await deleteFromSupabase(msg.mediaUrl).catch(() => {});
+        } else {
+          const localPath = path.join(__dirname, '..', msg.mediaUrl);
+          if (fs.existsSync(localPath)) {
+            try { fs.unlinkSync(localPath); } catch {}
+          }
+        }
+      }
+    }
+
+    await Message.deleteMany({
+      $or: [{ senderId: userIdStr }, { recipientId: userIdStr }],
+    });
+
+    // 5. Delete user photo from Supabase if uploaded
     if (user.photo && user.photo.startsWith('http')) {
       await deleteFromSupabase(user.photo).catch(() => {});
     }
 
-    // 5. Delete user document
+    // 6. Delete user document
     await User.findByIdAndDelete(user._id);
 
     res.json({
-      message: `User "${user.name}" (${user.email}) and all associated records deleted permanently.`,
+      message: `User "${user.name}" (${user.email}) and all associated records (submissions, messages, files) deleted permanently.`,
       deletedUserId: user._id,
     });
   } catch (error) {

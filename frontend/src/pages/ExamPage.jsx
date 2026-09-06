@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api, { API_ORIGIN } from '../utils/api';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import PDFViewer from '../components/PDFViewer';
 import AnswerSheet from '../components/AnswerSheet';
 import CountdownTimer from '../components/CountdownTimer';
+import AngryCheatingAlert from '../components/AngryCheatingAlert';
 
 const CACHE_KEY = (examId) => `exam_answers_${examId}`;
 
@@ -12,14 +14,21 @@ export default function ExamPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
 
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState({}); // { questionNo: 'ক'/'খ'/'গ'/'ঘ' }
   const [submitting, setSubmitting] = useState(false);
-  const [startTime] = useState(Date.now());
+  const [showCheatingWarning, setShowCheatingWarning] = useState(true);
+  const [startTime, setStartTime] = useState(Date.now());
   const [showConfirm, setShowConfirm] = useState(false);
   const hasSubmitted = useRef(false);
+
+  const handleWarningComplete = useCallback(() => {
+    setShowCheatingWarning(false);
+    setStartTime(Date.now());
+  }, []);
 
   // Load cached answers from localStorage
   useEffect(() => {
@@ -147,6 +156,7 @@ export default function ExamPage() {
         <CountdownTimer
           totalSeconds={exam.totalTime * 60}
           onTimeUp={handleTimeUp}
+          isPaused={showCheatingWarning}
         />
         <div style={{display:'flex', alignItems:'center', gap:'0.75rem'}}>
           <span style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>
@@ -246,6 +256,16 @@ export default function ExamPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Walking Angry Emoji Cheating Warning Alert (3s delay before exam timer) */}
+      {showCheatingWarning && (
+        <AngryCheatingAlert
+          duration={3}
+          message={exam?.cheatingWarningMessage}
+          userName={user?.name}
+          onComplete={handleWarningComplete}
+        />
       )}
     </div>
   );

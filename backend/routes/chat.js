@@ -101,10 +101,13 @@ router.get('/conversations', protect, async (req, res) => {
     const adminDoc = await Admin.findOne({
       email: (process.env.ADMIN_EMAIL || '').toLowerCase(),
     });
+    const isAdminActive = Boolean(adminDoc?.isOnline) && adminDoc?.lastSeen && (Date.now() - new Date(adminDoc.lastSeen).getTime() < 50000);
     const defaultAdmin = {
       name: adminDoc?.name || 'Exam Authority',
       title: adminDoc?.title || 'Head Administrator',
       photo: adminDoc?.photo || null,
+      isOnline: Boolean(isAdminActive),
+      lastSeen: adminDoc?.lastSeen || adminDoc?.updatedAt || adminDoc?.createdAt || null,
     };
 
     const conversations = [];
@@ -132,28 +135,27 @@ router.get('/conversations', protect, async (req, res) => {
           title: defaultAdmin.title,
           photo: defaultAdmin.photo,
           role: 'authority',
+          isOnline: defaultAdmin.isOnline,
+          lastSeen: defaultAdmin.lastSeen,
         };
       } else {
-        const u = await User.findById(partnerId).select('name email photo isActive isVerified');
-        if (u) {
-          partner = {
-            _id: u._id.toString(),
-            name: u.name,
-            email: u.email,
-            photo: u.photo || null,
-            role: 'student',
-            isActive: u.isActive !== false,
-          };
-        } else {
-          partner = {
-            _id: partnerId,
-            name: 'Deleted User',
-            email: '',
-            photo: null,
-            role: 'student',
-            isActive: false,
-          };
+        const u = await User.findById(partnerId).select('name email photo isActive isVerified isOnline lastSeen updatedAt createdAt');
+        if (!u) {
+          // User was deleted — purge residual messages and do not show in message box
+          Message.deleteMany({ conversationId: cid }).catch(() => {});
+          continue;
         }
+        const isUserActive = Boolean(u.isOnline) && u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime() < 50000);
+        partner = {
+          _id: u._id.toString(),
+          name: u.name,
+          email: u.email,
+          photo: u.photo || null,
+          role: 'student',
+          isActive: u.isActive !== false,
+          isOnline: Boolean(isUserActive),
+          lastSeen: u.lastSeen || u.updatedAt || u.createdAt || null,
+        };
       }
 
       conversations.push({
@@ -214,32 +216,33 @@ router.get('/messages/:partnerId', protect, async (req, res) => {
       const adminDoc = await Admin.findOne({
         email: (process.env.ADMIN_EMAIL || '').toLowerCase(),
       });
+      const isAdminActive = Boolean(adminDoc?.isOnline) && adminDoc?.lastSeen && (Date.now() - new Date(adminDoc.lastSeen).getTime() < 50000);
       partner = {
         _id: 'admin',
         name: adminDoc?.name || 'Exam Authority',
         title: adminDoc?.title || 'Head Administrator',
         photo: adminDoc?.photo || null,
         role: 'authority',
+        isOnline: Boolean(isAdminActive),
+        lastSeen: adminDoc?.lastSeen || adminDoc?.updatedAt || adminDoc?.createdAt || null,
       };
     } else {
-      const u = await User.findById(partnerId).select('name email photo isActive');
-      if (u) {
-        partner = {
-          _id: u._id.toString(),
-          name: u.name,
-          email: u.email,
-          photo: u.photo || null,
-          role: 'student',
-          isActive: u.isActive !== false,
-        };
-      } else {
-        partner = {
-          _id: partnerId,
-          name: 'Unknown / Deleted User',
-          photo: null,
-          role: 'student',
-        };
+      const u = await User.findById(partnerId).select('name email photo isActive isOnline lastSeen updatedAt createdAt');
+      if (!u) {
+        await Message.deleteMany({ conversationId });
+        return res.status(404).json({ message: 'User not found or has been deleted', messages: [], partner: null });
       }
+      const isUserActive = Boolean(u.isOnline) && u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime() < 50000);
+      partner = {
+        _id: u._id.toString(),
+        name: u.name,
+        email: u.email,
+        photo: u.photo || null,
+        role: 'student',
+        isActive: u.isActive !== false,
+        isOnline: Boolean(isUserActive),
+        lastSeen: u.lastSeen || u.updatedAt || u.createdAt || null,
+      };
     }
 
     res.json({ messages, partner });
@@ -330,12 +333,15 @@ router.get('/contacts', protect, async (req, res) => {
       const adminDoc = await Admin.findOne({
         email: (process.env.ADMIN_EMAIL || '').toLowerCase(),
       });
+      const isAdminActive = Boolean(adminDoc?.isOnline) && adminDoc?.lastSeen && (Date.now() - new Date(adminDoc.lastSeen).getTime() < 50000);
       contacts.push({
         _id: 'admin',
         name: adminDoc?.name || 'Exam Authority',
         title: adminDoc?.title || 'Head Administrator',
         photo: adminDoc?.photo || null,
         role: 'authority',
+        isOnline: Boolean(isAdminActive),
+        lastSeen: adminDoc?.lastSeen || adminDoc?.updatedAt || adminDoc?.createdAt || null,
       });
     }
 
@@ -346,17 +352,20 @@ router.get('/contacts', protect, async (req, res) => {
     }
 
     const users = await User.find(query)
-      .select('name email photo')
+      .select('name email photo isOnline lastSeen updatedAt createdAt')
       .sort({ name: 1 })
       .limit(100);
 
     for (const u of users) {
+      const isUserActive = Boolean(u.isOnline) && u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime() < 50000);
       contacts.push({
         _id: u._id.toString(),
         name: u.name,
         email: u.email,
         photo: u.photo || null,
         role: 'student',
+        isOnline: Boolean(isUserActive),
+        lastSeen: u.lastSeen || u.updatedAt || u.createdAt || null,
       });
     }
 
@@ -364,6 +373,48 @@ router.get('/contacts', protect, async (req, res) => {
   } catch (error) {
     console.error('Fetch contacts error:', error);
     res.status(500).json({ message: 'Failed to fetch contacts', error: error.message });
+  }
+});
+
+// ─── POST /api/chat/heartbeat ─────────────────────────────────────────────────
+router.post('/heartbeat', protect, async (req, res) => {
+  try {
+    const now = new Date();
+    if (req.admin) {
+      await Admin.updateOne(
+        { email: (req.adminEmail || process.env.ADMIN_EMAIL || '').toLowerCase() },
+        { $set: { lastSeen: now, isOnline: true } }
+      );
+    } else if (req.user) {
+      await User.updateOne(
+        { _id: req.user._id },
+        { $set: { lastSeen: now, isOnline: true } }
+      );
+    }
+    res.json({ ok: true, isOnline: true, lastSeen: now });
+  } catch (err) {
+    res.status(500).json({ message: 'Heartbeat failed', error: err.message });
+  }
+});
+
+// ─── POST /api/chat/offline ───────────────────────────────────────────────────
+router.post('/offline', protect, async (req, res) => {
+  try {
+    const now = new Date();
+    if (req.admin) {
+      await Admin.updateOne(
+        { email: (req.adminEmail || process.env.ADMIN_EMAIL || '').toLowerCase() },
+        { $set: { lastSeen: now, isOnline: false } }
+      );
+    } else if (req.user) {
+      await User.updateOne(
+        { _id: req.user._id },
+        { $set: { lastSeen: now, isOnline: false } }
+      );
+    }
+    res.json({ ok: true, isOnline: false, lastSeen: now });
+  } catch (err) {
+    res.status(500).json({ message: 'Offline update failed', error: err.message });
   }
 });
 

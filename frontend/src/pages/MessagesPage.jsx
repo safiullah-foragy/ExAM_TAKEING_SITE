@@ -60,7 +60,10 @@ export default function MessagesPage() {
     try {
       const client = getChatClient();
       const res = await client.get('/chat/conversations');
-      setConversations(res.data.conversations || []);
+      const validConvs = (res.data.conversations || []).filter(
+        (c) => c.partner && c.partner.name && !c.partner.name.toLowerCase().includes('deleted')
+      );
+      setConversations(validConvs);
     } catch (err) {
       if (!silent) console.error('Failed to load conversations', err);
     } finally {
@@ -104,6 +107,17 @@ export default function MessagesPage() {
   useEffect(() => {
     fetchConversations();
     fetchContacts();
+
+    // Heartbeat to keep current user active
+    const sendHeartbeat = async () => {
+      try {
+        const client = getChatClient();
+        await client.post('/chat/heartbeat');
+      } catch {}
+    };
+    sendHeartbeat();
+    const hbInterval = setInterval(sendHeartbeat, 30000);
+    return () => clearInterval(hbInterval);
   }, []);
 
   // Handle URL param ?to=admin or ?to=<id>
@@ -211,6 +225,39 @@ export default function MessagesPage() {
     if (isToday) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
+  const isUserActiveNow = (target) => {
+    if (!target) return false;
+    let isOnline = true;
+    let lastSeen = target;
+    if (typeof target === 'object') {
+      isOnline = target.isOnline !== undefined ? Boolean(target.isOnline) : true;
+      lastSeen = target.lastSeen;
+    }
+    if (!lastSeen) return false;
+    const diffMs = Date.now() - new Date(lastSeen).getTime();
+    return isOnline && diffMs < 50 * 1000;
+  };
+
+  const formatLastSeen = (lastSeen) => {
+    if (!lastSeen) return 'offline';
+    const date = new Date(lastSeen);
+    const now = Date.now();
+    const diffSeconds = Math.max(0, Math.floor((now - date.getTime()) / 1000));
+
+    if (diffSeconds < 60) return 'just now';
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    if (diffMinutes === 1) return '1 minute ago';
+    if (diffMinutes < 60) return `${diffMinutes} minutes ago`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours === 1) return '1 hour ago';
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
@@ -329,6 +376,8 @@ export default function MessagesPage() {
                     if (!snippet && conv.lastMessage?.mediaType === 'image') snippet = '📷 Photo';
                     if (!snippet && conv.lastMessage?.mediaType === 'pdf') snippet = `📄 ${conv.lastMessage?.mediaName || 'Document'}`;
 
+                    const isOnline = isUserActiveNow(conv.partner);
+
                     return (
                       <div
                         key={conv.conversationId}
@@ -336,12 +385,18 @@ export default function MessagesPage() {
                         className={`conversation-item ${isSelected ? 'active' : ''}`}
                         onClick={() => handleSelectPartner(conv.partner)}
                       >
-                        <div className={`chat-avatar-wrap ${isAuthority ? 'authority' : ''}`}>
-                          {avatarUrl ? (
-                            <img src={avatarUrl} alt="" className="chat-avatar-img" />
-                          ) : (
-                            isAuthority ? '👑' : initials
-                          )}
+                        <div className="chat-avatar-container">
+                          <div className={`chat-avatar-wrap ${isAuthority ? 'authority' : ''}`}>
+                            {avatarUrl ? (
+                              <img src={avatarUrl} alt="" className="chat-avatar-img" />
+                            ) : (
+                              isAuthority ? '👑' : initials
+                            )}
+                          </div>
+                          <span
+                            className={`avatar-status-dot ${isOnline ? 'online' : 'offline'}`}
+                            title={isOnline ? 'Active now' : `Last seen ${formatLastSeen(conv.partner?.lastSeen)}`}
+                          />
                         </div>
                         <div className="conversation-content">
                           <div className="conversation-header-row">
@@ -377,6 +432,7 @@ export default function MessagesPage() {
                     const isAuthority = c.role === 'authority' || c._id === 'admin';
                     const avatarUrl = c.photo ? getMediaUrl(c.photo) : null;
                     const initials = c.name?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '?';
+                    const isOnline = isUserActiveNow(c);
 
                     return (
                       <div
@@ -385,12 +441,18 @@ export default function MessagesPage() {
                         className={`conversation-item ${activePartner?._id === c._id ? 'active' : ''}`}
                         onClick={() => handleSelectPartner(c)}
                       >
-                        <div className={`chat-avatar-wrap ${isAuthority ? 'authority' : ''}`}>
-                          {avatarUrl ? (
-                            <img src={avatarUrl} alt="" className="chat-avatar-img" />
-                          ) : (
-                            isAuthority ? '👑' : initials
-                          )}
+                        <div className="chat-avatar-container">
+                          <div className={`chat-avatar-wrap ${isAuthority ? 'authority' : ''}`}>
+                            {avatarUrl ? (
+                              <img src={avatarUrl} alt="" className="chat-avatar-img" />
+                            ) : (
+                              isAuthority ? '👑' : initials
+                            )}
+                          </div>
+                          <span
+                            className={`avatar-status-dot ${isOnline ? 'online' : 'offline'}`}
+                            title={isOnline ? 'Active now' : `Last seen ${formatLastSeen(c.lastSeen)}`}
+                          />
                         </div>
                         <div className="conversation-content">
                           <div className="conversation-header-row">
@@ -400,7 +462,13 @@ export default function MessagesPage() {
                             </div>
                           </div>
                           <div className="conversation-snippet">
-                            {isAuthority ? (c.title || 'Head Administrator') : c.email}
+                            {isOnline ? (
+                              <span style={{ color: '#10b981', fontWeight: 600 }}>🟢 Active now</span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>
+                                Last seen {formatLastSeen(c.lastSeen)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -418,12 +486,18 @@ export default function MessagesPage() {
                 {/* Header */}
                 <div className="chat-room-header">
                   <div className="chat-room-partner">
-                    <div className={`chat-avatar-wrap ${activePartner.role === 'authority' ? 'authority' : ''}`}>
-                      {activePartner.photo ? (
-                        <img src={getMediaUrl(activePartner.photo)} alt="" className="chat-avatar-img" />
-                      ) : (
-                        activePartner.role === 'authority' ? '👑' : (activePartner.name?.[0] || '?')
-                      )}
+                    <div className="chat-avatar-container">
+                      <div className={`chat-avatar-wrap ${activePartner.role === 'authority' ? 'authority' : ''}`}>
+                        {activePartner.photo ? (
+                          <img src={getMediaUrl(activePartner.photo)} alt="" className="chat-avatar-img" />
+                        ) : (
+                          activePartner.role === 'authority' ? '👑' : (activePartner.name?.[0] || '?')
+                        )}
+                      </div>
+                      <span
+                        className={`avatar-status-dot ${isUserActiveNow(activePartner) ? 'online' : 'offline'}`}
+                        title={isUserActiveNow(activePartner) ? 'Active now' : `Last seen ${formatLastSeen(activePartner.lastSeen)}`}
+                      />
                     </div>
                     <div className="chat-room-partner-info">
                       <h3>
@@ -432,7 +506,22 @@ export default function MessagesPage() {
                           <span className="authority-tag">Authority</span>
                         )}
                       </h3>
-                      <p>{activePartner.title || activePartner.email || 'Online'}</p>
+                      <div className="partner-status-row">
+                        {isUserActiveNow(activePartner) ? (
+                          <span className="status-badge-active">
+                            <span className="active-green-dot" />
+                            Active now
+                          </span>
+                        ) : (
+                          <span className="status-badge-offline">
+                            <span className="offline-gray-dot" />
+                            Last seen {formatLastSeen(activePartner.lastSeen)}
+                          </span>
+                        )}
+                        {activePartner.title && (
+                          <span className="partner-title-sub">• {activePartner.title}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -445,22 +534,22 @@ export default function MessagesPage() {
                     <div className="chat-empty-state">
                       <div className="chat-empty-icon">👋</div>
                       <h4>Say Hello to {activePartner.name}!</h4>
-                      <p style={{ fontSize: '0.85rem', marginTop: '0.4rem' }}>
-                        Send a message, question, image, or PDF document to start the conversation.
-                      </p>
+                      <p>Send a message or attach images and PDF files.</p>
                     </div>
                   ) : (
                     messages.map((msg) => {
                       const isOutgoing = (isAdmin && msg.senderId === 'admin') || (!isAdmin && msg.senderId === currentUserId);
                       const partnerAvatar = activePartner.photo ? getMediaUrl(activePartner.photo) : null;
-
                       return (
                         <div
                           key={msg._id}
                           className={`message-row ${isOutgoing ? 'outgoing' : 'incoming'}`}
                         >
                           {!isOutgoing && (
-                            <div className={`chat-avatar-wrap ${msg.senderRole === 'authority' || msg.senderId === 'admin' ? 'authority' : ''}`} style={{ width: 32, height: 32, minWidth: 32, fontSize: '0.8rem' }}>
+                            <div
+                              className={`chat-avatar-wrap ${msg.senderRole === 'authority' || msg.senderId === 'admin' ? 'authority' : ''}`}
+                              style={{ width: 32, height: 32, minWidth: 32, fontSize: '0.8rem' }}
+                            >
                               {partnerAvatar ? (
                                 <img src={partnerAvatar} alt="" className="chat-avatar-img" />
                               ) : (
@@ -468,19 +557,20 @@ export default function MessagesPage() {
                               )}
                             </div>
                           )}
-
                           <div className="message-bubble-wrapper">
                             <span className="message-sender-name">
                               {isOutgoing ? 'You' : msg.senderName}
                             </span>
+
                             <div className="message-bubble">
                               {/* Media Attachment */}
                               {msg.mediaType === 'image' && (
                                 <img
                                   src={getMediaUrl(msg.mediaUrl)}
-                                  alt={msg.mediaName || 'Image'}
+                                  alt="attachment"
                                   className="message-media-image"
                                   onClick={() => setLightboxImg(getMediaUrl(msg.mediaUrl))}
+                                  title="Click to view full size"
                                 />
                               )}
 
@@ -506,7 +596,11 @@ export default function MessagesPage() {
                               <div className="message-footer">
                                 <span>{formatTimestamp(msg.createdAt)}</span>
                                 {isOutgoing && (
-                                  <span>{msg.isRead ? '✓✓ Read' : '✓ Sent'}</span>
+                                  <span
+                                    className={`message-seen-status ${msg.isRead ? 'seen' : 'not-seen'}`}
+                                  >
+                                    {msg.isRead ? '✓✓ seen' : '✓ not seen yet'}
+                                  </span>
                                 )}
                               </div>
                             </div>

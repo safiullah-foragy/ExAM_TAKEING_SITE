@@ -1966,6 +1966,35 @@ a:hover { color: var(--secondary-light); }
   object-fit: cover;
 }
 
+.chat-avatar-container {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+}
+
+.avatar-status-dot {
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-card);
+  z-index: 5;
+}
+
+.avatar-status-dot.online {
+  background-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.9);
+}
+
+.avatar-status-dot.offline {
+  background-color: #64748b;
+  opacity: 0.7;
+}
+
 .conversation-content {
   flex: 1;
   min-width: 0;
@@ -2071,6 +2100,78 @@ a:hover { color: var(--secondary-light); }
 .chat-room-partner-info p {
   font-size: 0.78rem;
   color: var(--text-secondary);
+}
+
+.partner-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+}
+
+.status-badge-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #10b981;
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.active-green-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: activePulse 1.6s infinite ease-in-out;
+}
+
+@keyframes activePulse {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0.7; }
+}
+
+.status-badge-offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.offline-gray-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #64748b;
+  opacity: 0.8;
+}
+
+.partner-title-sub {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.message-seen-status {
+  font-weight: 700;
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  letter-spacing: 0.02em;
+}
+
+.message-seen-status.seen {
+  color: #10b981 !important;
+  text-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+.message-seen-status.not-seen {
+  color: #ef4444 !important;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
 }
 
 /* Chat Messages */
@@ -2425,5 +2526,454 @@ a:hover { color: var(--secondary-light); }
   align-items: center;
   justify-content: center;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Angry Emoji Walking Cheating Warning Alert
+   ═══════════════════════════════════════════════════════════════ */
+
+.angry-alert-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: radial-gradient(circle at center, rgba(35, 12, 18, 0.88) 0%, rgba(7, 7, 17, 0.96) 100%);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  overflow: hidden;
+  animation: angryFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  padding: 1.5rem;
+}
+
+.angry-alert-overlay.fade-out {
+  opacity: 0;
+  transform: scale(0.96) translateY(-10px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  pointer-events: none;
+}
+
+@keyframes angryFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.angry-alert-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  max-width: 540px;
+  width: 100%;
+  animation: stageWalkIn 0.75s cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+}
+
+@keyframes stageWalkIn {
+  0% {
+    transform: translateX(-100vw);
+    opacity: 0;
+  }
+  60% {
+    transform: translateX(15px);
+    opacity: 1;
+  }
+  80% {
+    transform: translateX(-6px);
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ── Comic Speech Bubble ──────────────────────────────────────── */
+
+.angry-speech-bubble {
+  position: relative;
+  background: linear-gradient(145deg, rgba(30, 20, 32, 0.96) 0%, rgba(20, 16, 26, 0.98) 100%);
+  border: 2px solid #ef4444;
+  border-radius: 20px;
+  padding: 1.5rem 1.75rem 1.25rem;
+  box-shadow: 0 12px 45px rgba(239, 68, 68, 0.35),
+              0 0 25px rgba(239, 68, 68, 0.2),
+              inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  text-align: center;
+  margin-bottom: 2rem;
+  width: 100%;
+  max-width: 480px;
+  animation: speechBubblePop 0.5s 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+@keyframes speechBubblePop {
+  0% {
+    transform: scale(0.6) translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.speech-bubble-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  margin-bottom: 0.75rem;
+}
+
+.badge-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+  animation: badgeBlink 1s infinite alternate;
+}
+
+@keyframes badgeBlink {
+  from { opacity: 0.4; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1.2); }
+}
+
+.speech-bubble-message {
+  font-family: var(--font-bangla);
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.45;
+  color: #ffffff;
+  margin: 0.25rem 0 1rem;
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 12px rgba(239, 68, 68, 0.55), 0 0 2px #ff4d4f;
+}
+
+.speech-bubble-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.75rem;
+}
+
+.timer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-bangla);
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.timer-pill strong {
+  color: #f59e0b;
+  font-size: 1.15rem;
+}
+
+.timer-icon {
+  font-size: 1rem;
+  animation: rotateIcon 1s linear infinite;
+}
+
+@keyframes rotateIcon {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ef4444, #f59e0b);
+  border-radius: 9999px;
+  animation: progressDeplete linear forwards;
+}
+
+@keyframes progressDeplete {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* Speech bubble bottom pointer / tail */
+.speech-bubble-tail {
+  position: absolute;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-top: 14px solid #ef4444;
+}
+
+.speech-bubble-tail::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: -12px;
+  width: 0;
+  height: 0;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-top: 12px solid rgba(20, 16, 26, 0.98);
+}
+
+/* ── Walking Angry Emoji Character with Legs ─────────────────── */
+
+.angry-walker-container {
+  position: relative;
+  width: 180px;
+  height: 230px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.angry-character-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 15px 25px rgba(0, 0, 0, 0.6));
+}
+
+/* Animated walk cycle for legs */
+.walker-leg.leg-left {
+  transform-origin: 64px 125px;
+  animation: legWalkCycleLeft 0.38s ease-in-out infinite alternate;
+}
+
+.walker-leg.leg-right {
+  transform-origin: 96px 125px;
+  animation: legWalkCycleRight 0.38s ease-in-out infinite alternate;
+}
+
+@keyframes legWalkCycleLeft {
+  0% {
+    transform: rotate(-30deg) translateY(-2px);
+  }
+  50% {
+    transform: rotate(0deg) translateY(0);
+  }
+  100% {
+    transform: rotate(32deg) translateY(-8px);
+  }
+}
+
+@keyframes legWalkCycleRight {
+  0% {
+    transform: rotate(32deg) translateY(-8px);
+  }
+  50% {
+    transform: rotate(0deg) translateY(0);
+  }
+  100% {
+    transform: rotate(-30deg) translateY(-2px);
+  }
+}
+
+/* Body bobbing and stomping with steps */
+.walker-body-group {
+  transform-origin: 80px 80px;
+  animation: angryBodyBob 0.19s ease-in-out infinite alternate;
+}
+
+@keyframes angryBodyBob {
+  0% {
+    transform: translateY(0) rotate(-2.5deg);
+  }
+  100% {
+    transform: translateY(-8px) rotate(2.5deg);
+  }
+}
+
+/* Clenched fists swinging in anger */
+.walker-arm.arm-left {
+  transform-origin: 28px 85px;
+  animation: armWalkCycleLeft 0.38s ease-in-out infinite alternate;
+}
+
+.walker-arm.arm-right {
+  transform-origin: 132px 85px;
+  animation: armWalkCycleRight 0.38s ease-in-out infinite alternate;
+}
+
+/* Right arm brandishing knife menacingly */
+.walker-arm.arm-right-knife {
+  transform-origin: 130px 85px;
+  animation: knifeBrandish 0.32s ease-in-out infinite alternate;
+}
+
+@keyframes knifeBrandish {
+  0% {
+    transform: rotate(-6deg) translateY(0);
+  }
+  45% {
+    transform: rotate(18deg) translateY(-8px) translateX(2px);
+  }
+  75% {
+    transform: rotate(14deg) translateY(-5px) translateX(1px);
+  }
+  100% {
+    transform: rotate(28deg) translateY(-12px) translateX(4px);
+  }
+}
+
+/* Menacing sparkle on knife blade tip */
+.knife-glint {
+  animation: knifeGlintPulse 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes knifeGlintPulse {
+  0% {
+    opacity: 0.2;
+    transform: scale(0.4) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25) rotate(45deg);
+    filter: drop-shadow(0 0 6px #67e8f9);
+  }
+  100% {
+    opacity: 0.35;
+    transform: scale(0.6) rotate(90deg);
+  }
+}
+
+@keyframes armWalkCycleLeft {
+  0% {
+    transform: rotate(25deg) translateY(-3px);
+  }
+  100% {
+    transform: rotate(-30deg) translateY(4px);
+  }
+}
+
+@keyframes armWalkCycleRight {
+  0% {
+    transform: rotate(-30deg) translateY(4px);
+  }
+  100% {
+    transform: rotate(25deg) translateY(-3px);
+  }
+}
+
+/* Steam puffs from ears */
+.steam-puff.steam-left {
+  transform-origin: 20px 40px;
+  animation: steamRiseLeft 0.7s ease-out infinite;
+}
+
+.steam-puff.steam-right {
+  transform-origin: 140px 40px;
+  animation: steamRiseRight 0.7s ease-out infinite 0.35s;
+}
+
+@keyframes steamRiseLeft {
+  0% {
+    transform: scale(0.6) translate(0, 0);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.3) translate(-14px, -18px);
+    opacity: 0;
+  }
+}
+
+@keyframes steamRiseRight {
+  0% {
+    transform: scale(0.6) translate(0, 0);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.3) translate(14px, -18px);
+    opacity: 0;
+  }
+}
+
+/* Forehead anger vein pulse */
+.anger-vein {
+  transform-origin: 112px 42px;
+  animation: veinPulse 0.4s ease-in-out infinite alternate;
+}
+
+@keyframes veinPulse {
+  0% {
+    transform: translate(104px, 34px) scale(0.6);
+  }
+  100% {
+    transform: translate(104px, 34px) scale(0.78);
+  }
+}
+
+/* Ground shadow stretch & shrink */
+.character-ground-shadow {
+  transform-origin: 80px 200px;
+  animation: shadowStep 0.19s ease-in-out infinite alternate;
+}
+
+@keyframes shadowStep {
+  0% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scaleX(0.78) scaleY(0.85);
+    opacity: 0.25;
+  }
+}
+
+/* Cartoon stepping dust puffs */
+.dust-puff {
+  position: absolute;
+  bottom: 8px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+
+.dust-puff.dust-left {
+  left: 45px;
+  animation: dustPuffAnim 0.38s ease-out infinite;
+}
+
+.dust-puff.dust-right {
+  right: 45px;
+  animation: dustPuffAnim 0.38s ease-out infinite 0.19s;
+}
+
+@keyframes dustPuffAnim {
+  0% {
+    transform: scale(0.2) translateY(0);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.5) translateY(-10px) translateX(-6px);
+    opacity: 0;
+  }
+}
+
 
 

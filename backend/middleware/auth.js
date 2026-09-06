@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 
 const protect = async (req, res, next) => {
   try {
@@ -12,6 +13,8 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
     } else if (req.query && req.query.token) {
       token = req.query.token;
+    } else if (req.body && req.body.token) {
+      token = req.body.token;
     }
 
     if (!token) {
@@ -20,9 +23,17 @@ const protect = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    const isOfflineRoute = req.path === '/offline';
+
     if (decoded.role === 'admin') {
       req.admin = true;
       req.adminEmail = decoded.email;
+      if (!isOfflineRoute) {
+        Admin.updateOne(
+          { email: decoded.email.toLowerCase() },
+          { $set: { lastSeen: new Date(), isOnline: true } }
+        ).exec().catch(() => {});
+      }
       return next();
     }
 
@@ -40,6 +51,13 @@ const protect = async (req, res, next) => {
     }
 
     req.user = user;
+    if (!isOfflineRoute) {
+      User.updateOne(
+        { _id: user._id },
+        { $set: { lastSeen: new Date(), isOnline: true } }
+      ).exec().catch(() => {});
+    }
+
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Not authorized, token invalid' });
@@ -66,6 +84,10 @@ const adminOnly = async (req, res, next) => {
     }
     req.admin = true;
     req.adminEmail = decoded.email;
+    Admin.updateOne(
+      { email: decoded.email.toLowerCase() },
+      { $set: { lastSeen: new Date() } }
+    ).exec().catch(() => {});
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Invalid admin token' });
