@@ -570,25 +570,19 @@ export default function MessagesPage() {
                       const isPartnerSender = activePartner && String(msg.senderId) === String(activePartner._id);
                       const isOutgoing = !isPartnerSender;
 
-                      // Avatars
+                      // Avatars (only for incoming messages)
                       const incomingAvatar = msg.senderPhoto
                         ? getMediaUrl(msg.senderPhoto)
                         : (activePartner?.photo ? getMediaUrl(activePartner.photo) : null);
                       const incomingIsAuthority = msg.senderRole === 'authority' || msg.senderId === 'admin' || activePartner?.role === 'authority' || activePartner?._id === 'admin';
                       const incomingInitial = msg.senderName?.[0] || activePartner?.name?.[0] || '?';
 
-                      const myAvatar = !isAdmin && user?.photo
-                        ? getMediaUrl(user.photo)
-                        : (msg.senderPhoto ? getMediaUrl(msg.senderPhoto) : null);
-                      const myIsAuthority = isAdmin || msg.senderRole === 'authority' || msg.senderId === 'admin';
-                      const myInitial = isAdmin ? '👑' : (user?.name?.[0] || 'Me');
-
                       return (
                         <div
                           key={msg._id}
                           className={`message-row ${isOutgoing ? 'outgoing' : 'incoming'}`}
                         >
-                          {/* Small Round Profile Photo on Left for Incoming (Receiver side) */}
+                          {/* Small Round Profile Photo on Left ONLY for Incoming (Receiver side) */}
                           {!isOutgoing && (
                             <div
                               className={`message-avatar-wrap ${incomingIsAuthority ? 'authority' : ''}`}
@@ -651,20 +645,6 @@ export default function MessagesPage() {
                               </div>
                             </div>
                           </div>
-
-                          {/* Small Round Profile Photo on Right for Outgoing (Sender side) */}
-                          {isOutgoing && (
-                            <div
-                              className={`message-avatar-wrap ${myIsAuthority ? 'authority' : ''}`}
-                              title="You"
-                            >
-                              {myAvatar ? (
-                                <img src={myAvatar} alt="" className="message-avatar-img" />
-                              ) : (
-                                myIsAuthority ? '👑' : myInitial
-                              )}
-                            </div>
-                          )}
                         </div>
                       );
                     })
