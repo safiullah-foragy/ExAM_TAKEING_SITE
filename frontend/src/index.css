@@ -2186,26 +2186,71 @@ a:hover { color: var(--secondary-light); }
 
 .message-row {
   display: flex;
-  gap: 0.65rem;
-  max-width: 78%;
+  align-items: flex-end;
+  gap: 0.55rem;
+  max-width: 80%;
+  position: relative;
+  margin-bottom: 0.35rem;
 }
 
 .message-row.incoming {
   align-self: flex-start;
+  flex-direction: row;
 }
 
 .message-row.outgoing {
   align-self: flex-end;
-  flex-direction: row-reverse;
+  flex-direction: row;
+}
+
+/* Small Round Profile Photo beside every message (like Messenger) */
+.message-avatar-wrap {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
+.message-avatar-wrap.authority {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35));
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #f59e0b;
+}
+
+.message-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 
 .message-bubble-wrapper {
   display: flex;
   flex-direction: column;
+  max-width: 100%;
 }
 
 .message-row.outgoing .message-bubble-wrapper {
   align-items: flex-end;
+}
+
+.message-row.incoming .message-bubble-wrapper {
+  align-items: flex-start;
 }
 
 .message-sender-name {
@@ -2217,25 +2262,29 @@ a:hover { color: var(--secondary-light); }
 
 .message-bubble {
   padding: 0.75rem 1rem;
-  border-radius: 16px;
-  font-size: 0.9rem;
+  border-radius: 18px;
+  font-size: 0.92rem;
   line-height: 1.45;
   word-break: break-word;
   position: relative;
 }
 
+/* Receiver's view / Incoming: General neutral dark-slate color */
 .message-row.incoming .message-bubble {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
+/* Sender's view / Outgoing: Vibrant Messenger gradient accent color */
 .message-row.outgoing .message-bubble {
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
-  color: #fff;
-  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.25);
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.35);
   border-bottom-right-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .message-footer {

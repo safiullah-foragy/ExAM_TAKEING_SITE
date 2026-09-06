@@ -49,10 +49,20 @@ export default function MessagesPage() {
 
   const fileInputRef = useRef();
   const messagesEndRef = useRef();
+  const chatMessagesContainerRef = useRef();
 
   // Scroll to bottom helper
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (instant = false) => {
+    if (chatMessagesContainerRef.current) {
+      chatMessagesContainerRef.current.scrollTo({
+        top: chatMessagesContainerRef.current.scrollHeight,
+        behavior: instant ? 'auto' : 'smooth',
+      });
+    }
+    messagesEndRef.current?.scrollIntoView({
+      behavior: instant ? 'auto' : 'smooth',
+      block: 'end',
+    });
   };
 
   // Fetch conversations
@@ -94,7 +104,10 @@ export default function MessagesPage() {
         setActivePartner(res.data.partner);
       }
       if (!silent) {
-        setTimeout(scrollToBottom, 100);
+        // Auto load latest chat immediately upon opening so user does not need to scroll down
+        setTimeout(() => scrollToBottom(true), 20);
+        setTimeout(() => scrollToBottom(true), 120);
+        setTimeout(() => scrollToBottom(false), 300);
       }
     } catch (err) {
       if (!silent) toast.error('Failed to load message history');
@@ -527,7 +540,7 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Messages List */}
-                <div className="chat-messages">
+                <div className="chat-messages" ref={chatMessagesContainerRef}>
                   {loadingMessages ? (
                     <div className="loader-wrap"><div className="spinner" /></div>
                   ) : messages.length === 0 ? (
@@ -538,28 +551,45 @@ export default function MessagesPage() {
                     </div>
                   ) : (
                     messages.map((msg) => {
-                      const isOutgoing = (isAdmin && msg.senderId === 'admin') || (!isAdmin && msg.senderId === currentUserId);
-                      const partnerAvatar = activePartner.photo ? getMediaUrl(activePartner.photo) : null;
+                      // Partner is the receiver if current user sent it, or partner is the sender if incoming
+                      const isPartnerSender = activePartner && String(msg.senderId) === String(activePartner._id);
+                      const isOutgoing = !isPartnerSender;
+
+                      // Avatars
+                      const incomingAvatar = msg.senderPhoto
+                        ? getMediaUrl(msg.senderPhoto)
+                        : (activePartner?.photo ? getMediaUrl(activePartner.photo) : null);
+                      const incomingIsAuthority = msg.senderRole === 'authority' || msg.senderId === 'admin' || activePartner?.role === 'authority' || activePartner?._id === 'admin';
+                      const incomingInitial = msg.senderName?.[0] || activePartner?.name?.[0] || '?';
+
+                      const myAvatar = !isAdmin && user?.photo
+                        ? getMediaUrl(user.photo)
+                        : (msg.senderPhoto ? getMediaUrl(msg.senderPhoto) : null);
+                      const myIsAuthority = isAdmin || msg.senderRole === 'authority' || msg.senderId === 'admin';
+                      const myInitial = isAdmin ? '👑' : (user?.name?.[0] || 'Me');
+
                       return (
                         <div
                           key={msg._id}
                           className={`message-row ${isOutgoing ? 'outgoing' : 'incoming'}`}
                         >
+                          {/* Small Round Profile Photo on Left for Incoming (Receiver side) */}
                           {!isOutgoing && (
                             <div
-                              className={`chat-avatar-wrap ${msg.senderRole === 'authority' || msg.senderId === 'admin' ? 'authority' : ''}`}
-                              style={{ width: 32, height: 32, minWidth: 32, fontSize: '0.8rem' }}
+                              className={`message-avatar-wrap ${incomingIsAuthority ? 'authority' : ''}`}
+                              title={msg.senderName || activePartner?.name}
                             >
-                              {partnerAvatar ? (
-                                <img src={partnerAvatar} alt="" className="chat-avatar-img" />
+                              {incomingAvatar ? (
+                                <img src={incomingAvatar} alt="" className="message-avatar-img" />
                               ) : (
-                                msg.senderRole === 'authority' || msg.senderId === 'admin' ? '👑' : (msg.senderName?.[0] || '?')
+                                incomingIsAuthority ? '👑' : incomingInitial
                               )}
                             </div>
                           )}
+
                           <div className="message-bubble-wrapper">
                             <span className="message-sender-name">
-                              {isOutgoing ? 'You' : msg.senderName}
+                              {isOutgoing ? 'You' : (msg.senderName || activePartner?.name)}
                             </span>
 
                             <div className="message-bubble">
@@ -569,6 +599,7 @@ export default function MessagesPage() {
                                   src={getMediaUrl(msg.mediaUrl)}
                                   alt="attachment"
                                   className="message-media-image"
+                                  onLoad={() => scrollToBottom(false)}
                                   onClick={() => setLightboxImg(getMediaUrl(msg.mediaUrl))}
                                   title="Click to view full size"
                                 />
@@ -605,6 +636,20 @@ export default function MessagesPage() {
                               </div>
                             </div>
                           </div>
+
+                          {/* Small Round Profile Photo on Right for Outgoing (Sender side) */}
+                          {isOutgoing && (
+                            <div
+                              className={`message-avatar-wrap ${myIsAuthority ? 'authority' : ''}`}
+                              title="You"
+                            >
+                              {myAvatar ? (
+                                <img src={myAvatar} alt="" className="message-avatar-img" />
+                              ) : (
+                                myIsAuthority ? '👑' : myInitial
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })
