@@ -21,7 +21,28 @@ const getChatClient = () => {
 export default function MessagesPage() {
   const { user, logout } = useAuth();
   const isAdmin = Boolean(localStorage.getItem('adminToken'));
-  const currentUserId = isAdmin ? 'admin' : user?._id;
+
+  const getCurrentUserId = () => {
+    if (localStorage.getItem('adminToken')) return 'admin';
+    if (user?._id) return String(user._id);
+    if (user?.id) return String(user.id);
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser);
+        if (parsed._id || parsed.id) return String(parsed._id || parsed.id);
+      } catch {}
+    }
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.id) return String(payload.id);
+      } catch {}
+    }
+    return null;
+  };
+  const currentUserId = getCurrentUserId();
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -566,11 +587,11 @@ export default function MessagesPage() {
                     </div>
                   ) : (
                     messages.map((msg) => {
-                      // Partner is the receiver if current user sent it, or partner is the sender if incoming
-                      const isPartnerSender = activePartner && String(msg.senderId) === String(activePartner._id);
-                      const isOutgoing = !isPartnerSender;
+                      const currentUserId = getCurrentUserId();
+                      // Following connectify_web: const isOwn = message.sender_id === user.uid
+                      const isOwn = currentUserId ? String(msg.senderId) === String(currentUserId) : false;
 
-                      // Avatars (only for incoming messages)
+                      // Avatars (only for incoming messages on the left side)
                       const incomingAvatar = msg.senderPhoto
                         ? getMediaUrl(msg.senderPhoto)
                         : (activePartner?.photo ? getMediaUrl(activePartner.photo) : null);
@@ -580,10 +601,10 @@ export default function MessagesPage() {
                       return (
                         <div
                           key={msg._id}
-                          className={`message-row ${isOutgoing ? 'outgoing' : 'incoming'}`}
+                          className={`message-row-wrapper ${isOwn ? 'is-own' : 'is-other'}`}
                         >
-                          {/* Small Round Profile Photo on Left ONLY for Incoming (Receiver side) */}
-                          {!isOutgoing && (
+                          {/* Small Round Profile Photo on Left ONLY for other user (connectify_web style) */}
+                          {!isOwn && (
                             <div
                               className={`message-avatar-wrap ${incomingIsAuthority ? 'authority' : ''}`}
                               title={msg.senderName || activePartner?.name}
@@ -596,12 +617,14 @@ export default function MessagesPage() {
                             </div>
                           )}
 
-                          <div className="message-bubble-wrapper">
-                            <span className="message-sender-name">
-                              {isOutgoing ? 'You' : (msg.senderName || activePartner?.name)}
-                            </span>
+                          <div className={`message-bubble-wrapper ${isOwn ? 'is-own' : 'is-other'}`}>
+                            {!isOwn && (
+                              <span className="message-sender-name">
+                                {msg.senderName || activePartner?.name}
+                              </span>
+                            )}
 
-                            <div className="message-bubble">
+                            <div className={`message-bubble ${isOwn ? 'own-bubble' : 'other-bubble'}`}>
                               {/* Media Attachment */}
                               {msg.mediaType === 'image' && (
                                 <img
@@ -635,7 +658,7 @@ export default function MessagesPage() {
 
                               <div className="message-footer">
                                 <span>{formatTimestamp(msg.createdAt)}</span>
-                                {isOutgoing && (
+                                {isOwn && (
                                   <span
                                     className={`message-seen-status ${msg.isRead ? 'seen' : 'not-seen'}`}
                                   >

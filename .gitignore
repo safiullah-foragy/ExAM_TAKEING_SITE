@@ -9,3 +9,4 @@ uploads/
 dist/
 .DS_Store
 *.pdf
+connectify_web/

@@ -17,6 +17,8 @@ export default function AdminLoginPage() {
     setLoading(true);
     try {
       const res = await api.post('/admin/login', form);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
       localStorage.setItem('adminToken', res.data.token);
       toast.success('Welcome, Admin! 🛡️');
       navigate('/admin');
