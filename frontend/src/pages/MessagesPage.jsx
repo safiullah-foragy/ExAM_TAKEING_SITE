@@ -161,6 +161,12 @@ export default function MessagesPage() {
     fetchActiveMessages(partner._id);
   };
 
+  const handleBackToConversations = () => {
+    setActivePartner(null);
+    setMessages([]);
+    navigate('/messages', { replace: true });
+  };
+
   // Attachment handler
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -332,7 +338,7 @@ export default function MessagesPage() {
       <div className="messenger-container">
         <div className="messenger-card glass">
           {/* Left Sidebar */}
-          <div className="messenger-sidebar">
+          <div className={`messenger-sidebar ${activePartner ? 'has-active-chat' : ''}`}>
             <div className="messenger-sidebar-header">
               <div className="messenger-sidebar-title">
                 <h2>💬 Chats</h2>
@@ -353,19 +359,14 @@ export default function MessagesPage() {
                 className={`messenger-tab-btn ${activeTab === 'chats' ? 'active' : ''}`}
                 onClick={() => setActiveTab('chats')}
               >
-                Recent Chats
-                {conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0) > 0 && (
-                  <span className="unread-count-badge">
-                    {conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0)}
-                  </span>
-                )}
+                Recent
               </button>
               <button
                 id="tab-contacts-btn"
                 className={`messenger-tab-btn ${activeTab === 'contacts' ? 'active' : ''}`}
                 onClick={() => setActiveTab('contacts')}
               >
-                + New Chat ({contacts.length})
+                Contacts ({contacts.length})
               </button>
             </div>
 
@@ -375,8 +376,10 @@ export default function MessagesPage() {
                 loadingConversations ? (
                   <div className="loader-wrap"><div className="spinner" /></div>
                 ) : filteredConversations.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                    {searchQuery ? 'No matching conversations found.' : 'No conversations yet. Start a chat from contacts!'}
+                  <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>💬</div>
+                    No conversations yet.<br />
+                    Click <strong>Contacts</strong> to start a chat!
                   </div>
                 ) : (
                   filteredConversations.map((conv) => {
@@ -493,47 +496,59 @@ export default function MessagesPage() {
           </div>
 
           {/* Right Chat Room Area */}
-          <div className="messenger-main">
+          <div className={`messenger-main ${!activePartner ? 'no-active-chat' : ''}`}>
             {activePartner ? (
               <>
                 {/* Header */}
                 <div className="chat-room-header">
-                  <div className="chat-room-partner">
-                    <div className="chat-avatar-container">
-                      <div className={`chat-avatar-wrap ${activePartner.role === 'authority' ? 'authority' : ''}`}>
-                        {activePartner.photo ? (
-                          <img src={getMediaUrl(activePartner.photo)} alt="" className="chat-avatar-img" />
-                        ) : (
-                          activePartner.role === 'authority' ? '👑' : (activePartner.name?.[0] || '?')
-                        )}
+                  <div className="chat-room-header-left">
+                    <button
+                      type="button"
+                      className="chat-back-btn"
+                      onClick={handleBackToConversations}
+                      title="Back to conversation list"
+                      id="back-to-conversations-btn"
+                    >
+                      <span className="chat-back-icon">←</span>
+                      <span className="chat-back-text">Back</span>
+                    </button>
+                    <div className="chat-room-partner">
+                      <div className="chat-avatar-container">
+                        <div className={`chat-avatar-wrap ${activePartner.role === 'authority' ? 'authority' : ''}`}>
+                          {activePartner.photo ? (
+                            <img src={getMediaUrl(activePartner.photo)} alt="" className="chat-avatar-img" />
+                          ) : (
+                            activePartner.role === 'authority' ? '👑' : (activePartner.name?.[0] || '?')
+                          )}
+                        </div>
+                        <span
+                          className={`avatar-status-dot ${isUserActiveNow(activePartner) ? 'online' : 'offline'}`}
+                          title={isUserActiveNow(activePartner) ? 'Active now' : `Last seen ${formatLastSeen(activePartner.lastSeen)}`}
+                        />
                       </div>
-                      <span
-                        className={`avatar-status-dot ${isUserActiveNow(activePartner) ? 'online' : 'offline'}`}
-                        title={isUserActiveNow(activePartner) ? 'Active now' : `Last seen ${formatLastSeen(activePartner.lastSeen)}`}
-                      />
-                    </div>
-                    <div className="chat-room-partner-info">
-                      <h3>
-                        {activePartner.name}
-                        {activePartner.role === 'authority' && (
-                          <span className="authority-tag">Authority</span>
-                        )}
-                      </h3>
-                      <div className="partner-status-row">
-                        {isUserActiveNow(activePartner) ? (
-                          <span className="status-badge-active">
-                            <span className="active-green-dot" />
-                            Active now
-                          </span>
-                        ) : (
-                          <span className="status-badge-offline">
-                            <span className="offline-gray-dot" />
-                            Last seen {formatLastSeen(activePartner.lastSeen)}
-                          </span>
-                        )}
-                        {activePartner.title && (
-                          <span className="partner-title-sub">• {activePartner.title}</span>
-                        )}
+                      <div className="chat-room-partner-info">
+                        <h3>
+                          {activePartner.name}
+                          {activePartner.role === 'authority' && (
+                            <span className="authority-tag">Authority</span>
+                          )}
+                        </h3>
+                        <div className="partner-status-row">
+                          {isUserActiveNow(activePartner) ? (
+                            <span className="status-badge-active">
+                              <span className="active-green-dot" />
+                              Active now
+                            </span>
+                          ) : (
+                            <span className="status-badge-offline">
+                              <span className="offline-gray-dot" />
+                              Last seen {formatLastSeen(activePartner.lastSeen)}
+                            </span>
+                          )}
+                          {activePartner.title && (
+                            <span className="partner-title-sub">• {activePartner.title}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

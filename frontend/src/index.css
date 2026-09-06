@@ -2074,13 +2074,59 @@ a:hover { color: var(--secondary-light); }
 }
 
 .chat-room-header {
-  padding: 0.9rem 1.4rem;
+  padding: 0.85rem 1.3rem;
   border-bottom: 1px solid var(--border-subtle);
-  background: rgba(18, 18, 38, 0.9);
+  background: rgba(18, 18, 38, 0.95);
+  backdrop-filter: blur(12px);
   display: flex;
   justify-content: space-between;
   align-items: center;
   z-index: 10;
+}
+
+.chat-room-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.chat-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.85rem;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.chat-back-btn:hover {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: #ffffff;
+  transform: translateX(-2px);
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.35);
+}
+
+.chat-back-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+.chat-back-btn:hover .chat-back-icon {
+  transform: translateX(-3px);
+}
+
+.chat-back-text {
+  letter-spacing: 0.01em;
 }
 
 .chat-room-partner {
@@ -2494,6 +2540,31 @@ a:hover { color: var(--secondary-light); }
 @keyframes floatIcon {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
+}
+
+/* Responsive Messenger Layout */
+@media (max-width: 768px) {
+  .messenger-container {
+    padding: 0 0.5rem;
+    margin: 0.5rem auto;
+  }
+  .messenger-card {
+    min-height: 85vh;
+  }
+  .messenger-sidebar {
+    width: 100%;
+    min-width: 100%;
+    border-right: none;
+  }
+  .messenger-sidebar.has-active-chat {
+    display: none;
+  }
+  .messenger-main {
+    width: 100%;
+  }
+  .messenger-main.no-active-chat {
+    display: none;
+  }
 }
 
 /* Admin Profile Styles */
