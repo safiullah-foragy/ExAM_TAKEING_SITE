@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import axios from 'axios';
+import { API_ORIGIN } from '../utils/api';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const BASE_URL = API_ORIGIN || 'http://localhost:5000';
 
 export default function PresenceTracker() {
   useEffect(() => {

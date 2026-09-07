@@ -1,8 +1,13 @@
 import axios from 'axios';
 
-// In production on Vercel, set VITE_API_URL=https://your-backend.onrender.com
-export const API_ORIGIN = import.meta.env.VITE_API_URL
-  ? import.meta.env.VITE_API_URL.replace(/\/$/, '')
+// In production, fallback automatically to the Render backend if env variable is missing
+const rawEnvUrl =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.PROD ? 'https://exam-takeing-site.onrender.com' : '');
+
+export const API_ORIGIN = rawEnvUrl
+  ? rawEnvUrl.replace(/\/$/, '').replace(/\/api$/, '')
   : '';
 
 export const API_BASE = API_ORIGIN ? `${API_ORIGIN}/api` : '/api';

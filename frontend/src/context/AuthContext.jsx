@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { API_ORIGIN } from '../utils/api';
 
 const AuthContext = createContext(null);
 
@@ -27,7 +28,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     const savedToken = localStorage.getItem('token');
     if (savedToken) {
-      const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      const BASE_URL = API_ORIGIN || 'http://localhost:5000';
       fetch(`${BASE_URL}/api/chat/offline`, {
         method: 'POST',
         headers: {
