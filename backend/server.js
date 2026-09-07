@@ -49,7 +49,13 @@ app.use('/api/exam', examRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/chat', chatRoutes);
 
-// Health check
+// Health check and root route
+app.get('/', (req, res) => {
+  res.json({ message: 'Exam Taking Site API Server is running 🚀', health: '/api/health' });
+});
+
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
