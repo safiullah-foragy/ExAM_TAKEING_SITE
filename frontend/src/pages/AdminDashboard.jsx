@@ -10,6 +10,16 @@ adminApi.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+adminApi.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('adminToken');
+      window.location.href = '/admin/login';
+    }
+    return Promise.reject(err);
+  }
+);
 
 const BANGLA_OPTIONS = ['ক', 'খ', 'গ', 'ঘ'];
 
