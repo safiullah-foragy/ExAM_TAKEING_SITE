@@ -436,12 +436,87 @@ const sendAdminResultNotificationEmail = async ({
   });
 };
 
+/**
+ * Send notification email to Admin when a new account is created
+ */
+const sendAdminNewUserNotificationEmail = async (adminEmail, userName, userEmail) => {
+  let formattedDate;
+  try {
+    formattedDate = new Date().toLocaleString('en-US', {
+      timeZone: 'Asia/Dhaka',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  } catch {
+    formattedDate = new Date().toLocaleString();
+  }
+
+  const clientUrl = (process.env.CLIENT_URL || 'https://exam-takeing-site-1.onrender.com').replace(/\/$/, '');
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <body style="margin:0;padding:0;background:#0f0f1a;font-family:'Segoe UI',Roboto,sans-serif;">
+        <div style="max-width:540px;margin:40px auto;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:16px;overflow:hidden;border:1px solid rgba(99,102,241,0.3);box-shadow:0 20px 40px rgba(0,0,0,0.4);">
+          <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:28px 32px;text-align:center;">
+            <h1 style="color:#fff;margin:0;font-size:24px;letter-spacing:-0.5px;">🎉 New Account Created!</h1>
+            <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;">A new user has registered on ExamSite</p>
+          </div>
+          <div style="padding:32px;">
+            <p style="color:#94a3b8;margin:0 0 20px;font-size:15px;line-height:1.6;">
+              Hello Admin, a new student has successfully registered and verified their account:
+            </p>
+
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:24px;">
+              <table style="width:100%;color:#cbd5e1;font-size:14px;border-collapse:collapse;">
+                <tr>
+                  <td style="padding:8px 0;color:#94a3b8;width:120px;">👤 <strong>Name:</strong></td>
+                  <td style="padding:8px 0;color:#f8fafc;font-weight:700;font-size:15px;">${userName}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;color:#94a3b8;">📧 <strong>Email:</strong></td>
+                  <td style="padding:8px 0;color:#818cf8;font-weight:600;">${userEmail}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;color:#94a3b8;">📅 <strong>Created At:</strong></td>
+                  <td style="padding:8px 0;color:#cbd5e1;">${formattedDate}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;color:#94a3b8;">🛡️ <strong>Status:</strong></td>
+                  <td style="padding:8px 0;color:#10b981;font-weight:600;">Verified & Active ✓</td>
+                </tr>
+              </table>
+            </div>
+
+            <div style="text-align:center;margin:28px 0 10px;">
+              <a href="${clientUrl}/admin" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 28px;border-radius:8px;box-shadow:0 4px 14px rgba(99,102,241,0.4);">
+                Go to Admin Dashboard →
+              </a>
+            </div>
+          </div>
+          <div style="background:rgba(0,0,0,0.3);padding:16px 32px;text-align:center;">
+            <p style="color:#475569;font-size:12px;margin:0;">© 2026 ExamSite Admin Alerts</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return await sendMailGeneric({
+    to: adminEmail,
+    name: 'ExamSite Admin',
+    subject: `🎉 New User Registered: ${userName} (${userEmail})`,
+    html,
+  });
+};
+
 module.exports = {
   sendOTPEmail,
   sendResultEmail,
   sendNewExamNotificationEmail,
   sendBroadcastEmail,
   sendAdminResultNotificationEmail,
+  sendAdminNewUserNotificationEmail,
 };
 
 

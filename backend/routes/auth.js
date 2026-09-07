@@ -3,7 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
-const { sendOTPEmail } = require('../utils/mailer');
+const { sendOTPEmail, sendAdminNewUserNotificationEmail } = require('../utils/mailer');
 
 // Generate 6-digit OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
@@ -143,6 +143,14 @@ router.post('/verify-otp', async (req, res) => {
     user.otp = null;
     user.otpExpiry = null;
     await user.save();
+
+    // Notify Admin of new account creation
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.MAIL_USER || 'safiullahforagy1@gmail.com';
+    if (adminEmail) {
+      sendAdminNewUserNotificationEmail(adminEmail, user.name, user.email).catch((mailErr) => {
+        console.error('Failed to notify admin of new user registration:', mailErr.message);
+      });
+    }
 
     // Issue JWT
     const token = jwt.sign(
